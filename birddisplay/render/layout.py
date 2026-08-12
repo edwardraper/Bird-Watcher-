@@ -91,8 +91,9 @@ def _load_photo(path: str | None) -> Image.Image | None:
 class BoardRenderer:
     def __init__(self, config: Config):
         self.config = config
-        self.width = config.display.width
-        self.height = config.display.height
+        # The panel is landscape and always will be; board_size is what to
+        # draw on, which is the panel turned on its side when the frame is.
+        self.width, self.height = config.display.board_size
         self.fonts = F.FontBook()
 
     # -- public ----------------------------------------------------------

@@ -158,6 +158,23 @@ class DisplayConfig:
     # Its .json sidecar sits beside it.
     export_path: Path = Path("board.png")
 
+    @property
+    def portrait(self) -> bool:
+        return self.rotate in (90, 270)
+
+    @property
+    def board_size(self) -> tuple[int, int]:
+        """The canvas the renderer composes on.
+
+        width/height describe the panel, which is landscape and always
+        will be -- the glass does not turn. Hanging the frame on its side
+        is a rotation applied on the way out, so everything upstream of
+        the display backend draws 480x800 and never thinks about it again.
+        """
+        if self.portrait:
+            return self.height, self.width
+        return self.width, self.height
+
 
 # Nominal primaries, used to decide which ink each pixel becomes. These
 # are deliberately saturated: matching against the muted values the panel
@@ -338,8 +355,11 @@ def load_config(path: Path | str | None = None) -> Config:
         raise ConfigError(
             '[display].backend must be "epaper", "preview" or "inky"'
         )
-    if display.rotate not in {0, 180}:
-        raise ConfigError("[display].rotate must be 0 or 180")
+    if display.rotate not in {0, 90, 180, 270}:
+        raise ConfigError(
+            "[display].rotate must be 0, 90, 180 or 270 -- 90 and 270 hang "
+            "the frame on its side and draw a portrait board"
+        )
 
     palette_raw = _section(data, "palette")
     match_raw = palette_raw.get("match")

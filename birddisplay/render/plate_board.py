@@ -1,29 +1,35 @@
-"""The quiet board: one engraving, one name, and a line of hairline rules.
+"""The quiet board: one bird, one name, and a line of hairline rules.
 
-A second layout, for when the headline bird has a Keulemans plate rather
-than a photograph. The photo board fills its left half edge to edge, which
-is right for a photograph -- a photograph cropped small looks like a
-thumbnail. A cut-out engraving wants the opposite treatment: the bird sits
-in white space with nothing round it, the way it sits on the page of the
-book it came from.
+The layout for a headline that has a Keulemans plate rather than a
+photograph -- and, when the frame hangs on its side, for photographs too.
 
-    ┌──────────────────────────────────────────────┐
-    │ 12 AUGUST 2026                 BOWLING GREEN │   date left,
-    │ ──────────────────────────────────────────── │   place right
-    │                                              │
-    │   Blackbird                    ╭────────╮    │
-    │   Turdus merula                │  bird  │    │
-    │   ───                          ╰────────╯    │
-    │   07:14 · 3 birds                            │
-    │ ──────────────────────────────────────────── │
-    │ ALSO SEEN                                    │
-    │ Whimbrel · Greenshank · Little Egret …       │   Times, bottom
-    └──────────────────────────────────────────────┘
+Two compositions, one type scale:
 
-Everything is set in one serif family so the board reads as a printed page
-rather than a dashboard, and the only colour on it comes from the bird
-itself. Two rules earn their place: the plate is pasted through its own
-alpha mask, so the white around the bird stays flat white ink instead of
+    landscape 800x480              portrait 480x800
+    ┌──────────────────────┐       ┌──────────────┐
+    │ 12 AUG      THORPE   │       │ 12 AUG THORPE│  date left,
+    │ ──────────────────── │       │ ──────────── │  place right
+    │                      │       │              │
+    │  Blackbird   ╭─────╮ │       │    ╭──────╮  │
+    │  Turdus      │bird │ │       │    │ bird │  │
+    │  ───         ╰─────╯ │       │    ╰──────╯  │
+    │  07:14               │       │     ───      │
+    │ ──────────────────── │       │   Blackbird  │
+    │ ALSO SEEN            │       │ Turdus merula│
+    │ Whimbrel · Greenshank│       │    07:14     │
+    └──────────────────────┘       │ ──────────── │
+                                   │ ALSO SEEN    │
+                                   │ Whimbrel · … │
+                                   └──────────────┘
+
+Portrait is centred and landscape is not, for the same reason a printed
+plate is centred on its page and a spread is not: with the bird above the
+name there is a single axis to hang everything on, and using it is most of
+what makes the board look printed rather than laid out.
+
+Everything is set in one serif family, and the only colour comes from the
+bird itself. Two rules earn their place: a cut-out plate is pasted through
+its own alpha so the paper around it stays flat white ink rather than
 dither noise, and the small type is never dithered at all.
 """
 
@@ -31,22 +37,19 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Sequence
 
 from PIL import Image, ImageDraw
 
 from ..config import Config
 from ..model import Board, Sighting
 from . import fonts as F
-from .palette import Ink, new_canvas, quantize_photo
+from .palette import Ink, fit_cover, new_canvas, quantize_photo
 
 log = logging.getLogger(__name__)
 
-MARGIN = 44
-HEADER_Y = 30
-RULE_GAP = 18
 FOOTER_LABEL = "ALSO SEEN"
 SEPARATOR = " · "
+HEADER_Y = 30
 
 
 def _tracked_width(text: str, font, tracking: float) -> float:
@@ -89,20 +92,22 @@ def _fit_contain(image: Image.Image, width: int, height: int) -> Image.Image:
 
 
 class PlateBoardRenderer:
-    """Renders a Board whose headline image is a cut-out plate."""
+    """Renders a Board around one image, in either orientation."""
 
     def __init__(self, config: Config):
         self.config = config
-        self.width = config.display.width
-        self.height = config.display.height
+        self.width, self.height = config.display.board_size
+        self.portrait = config.display.portrait
 
-        self.header = F.load_font("times", 15)
-        self.name = F.load_font("times", 60)
-        self.scientific = F.load_font("times_italic", 21)
+        self.margin = 36 if self.portrait else 44
+        self.rule_gap = 18
+        self.header = F.load_font("times", 14 if self.portrait else 15)
+        self.scientific = F.load_font("times_italic", 22 if self.portrait else 21)
         self.detail = F.load_font("times", 17)
         self.label = F.load_font("times", 12)
-        self.listing = F.load_font("times", 17)
+        self.listing = F.load_font("times", 16 if self.portrait else 17)
         self.credit = F.load_font("times", 11)
+        self.name_sizes = (56, 48, 42, 36, 30) if self.portrait else (60, 52, 44, 38, 32)
 
     # -- public ----------------------------------------------------------
 
@@ -127,7 +132,7 @@ class PlateBoardRenderer:
     def render(
         self,
         board: Board,
-        plate: Image.Image | None,
+        image: Image.Image | None,
         now: datetime | None = None,
     ) -> Image.Image:
         now = self._local(now)
@@ -137,113 +142,63 @@ class PlateBoardRenderer:
         header_bottom = self._draw_header(draw, board, now)
         footer_top = self._draw_footer(draw, board)
 
-        if plate is not None:
-            self._draw_plate(canvas, plate, header_bottom, footer_top)
-        self._draw_subject(draw, board, header_bottom)
+        if self.portrait:
+            text_top = self._portrait_text_top(board, footer_top)
+            if image is not None:
+                self._draw_image(canvas, image, header_bottom + 26, text_top - 24)
+            self._draw_subject_centred(draw, board, text_top)
+        else:
+            if image is not None:
+                self._draw_image(
+                    canvas, image, header_bottom + 16, footer_top - 16, left=400
+                )
+            self._draw_subject_left(draw, board, header_bottom)
         return canvas
 
-    # -- pieces ----------------------------------------------------------
+    # -- header and footer -------------------------------------------------
 
     def _draw_header(
         self, draw: ImageDraw.ImageDraw, board: Board, now: datetime
     ) -> int:
         """Date top left, place top right, hairline under both."""
-        date_text = now.strftime("%-d %B %Y").upper()
-        _draw_tracked(draw, (MARGIN, HEADER_Y), date_text, self.header, Ink.BLACK)
+        tracking = 1.8 if self.portrait else 2.4
+        date_text = now.strftime("%-d %b %Y" if self.portrait else "%-d %B %Y").upper()
+        _draw_tracked(
+            draw, (self.margin, HEADER_Y), date_text, self.header, Ink.BLACK, tracking
+        )
 
         place = board.headline.location if board.headline else board.region_name
-        place = self._shorten_to(place.upper(), self.header, 330, tracking=2.4)
-        width = _tracked_width(place, self.header, 2.4)
+        room = (
+            self.width
+            - 2 * self.margin
+            - _tracked_width(date_text, self.header, tracking)
+            - 24
+        )
+        place = self._shorten_to(place.upper(), self.header, room, tracking)
+        width = _tracked_width(place, self.header, tracking)
         _draw_tracked(
             draw,
-            (self.width - MARGIN - width, HEADER_Y),
+            (self.width - self.margin - width, HEADER_Y),
             place,
             self.header,
             Ink.BLACK,
+            tracking,
         )
 
         rule_y = HEADER_Y + F.line_height(self.header) + 6
-        draw.line((MARGIN, rule_y, self.width - MARGIN, rule_y), fill=int(Ink.BLACK))
+        draw.line(
+            (self.margin, rule_y, self.width - self.margin, rule_y), fill=int(Ink.BLACK)
+        )
 
         if board.is_stale(self.config.cache.max_age_hours):
             # The one thing on this board that is allowed to shout.
-            stale_y = rule_y + 6
             draw.text(
-                (MARGIN, stale_y), "DATA STALE", font=self.label, fill=int(Ink.RED)
+                (self.margin, rule_y + 6),
+                "DATA STALE",
+                font=self.label,
+                fill=int(Ink.RED),
             )
         return rule_y
-
-    def _draw_subject(
-        self, draw: ImageDraw.ImageDraw, board: Board, header_bottom: int
-    ) -> None:
-        """The species, large, in the left third."""
-        if board.headline is None:
-            return
-        species = board.headline.species
-        column = 360
-
-        font, name = F.fit_single_line(
-            species.common_name, "times", column, (60, 52, 44, 38, 32)
-        )
-        y = header_bottom + 74
-        draw.text((MARGIN, y), name, font=font, fill=int(Ink.BLACK))
-        y += F.line_height(font) - 6
-
-        if species.scientific_name:
-            draw.text(
-                (MARGIN, y),
-                F.truncate(species.scientific_name, self.scientific, column),
-                font=self.scientific,
-                fill=int(Ink.BLACK),
-            )
-            y += F.line_height(self.scientific) + 22
-
-        draw.line((MARGIN, y, MARGIN + 46, y), fill=int(Ink.BLACK))
-        y += 20
-
-        detail = self._detail_line(board.headline)
-        if detail:
-            draw.text(
-                (MARGIN, y),
-                F.truncate(detail, self.detail, column),
-                font=self.detail,
-                fill=int(Ink.BLACK),
-            )
-
-    def _draw_plate(
-        self,
-        canvas: Image.Image,
-        plate: Image.Image,
-        header_bottom: int,
-        footer_top: int,
-    ) -> None:
-        """Paste the bird through its own alpha, so the ground stays white.
-
-        Quantising the whole rectangle and pasting it would dither the
-        paper as well, and a faint checkerboard of stray ink around the
-        bird is exactly what makes a six-colour panel look cheap.
-        """
-        box_left = 400
-        box_top = header_bottom + 16
-        box_width = self.width - MARGIN - box_left
-        box_height = footer_top - box_top - 16
-        if box_width <= 0 or box_height <= 0:
-            return
-
-        image = plate if plate.mode == "RGBA" else plate.convert("RGBA")
-        image = _fit_contain(image, box_width, box_height)
-
-        # Dither against white, which is what it will actually sit on.
-        flattened = Image.new("RGB", image.size, (255, 255, 255))
-        flattened.paste(image, mask=image.split()[3])
-        dithered = quantize_photo(
-            flattened, self.config.plates.enhancement, self.config.palette
-        )
-
-        mask = image.split()[3].point(lambda a: 255 if a > 128 else 0)
-        x = box_left + (box_width - image.width) // 2
-        y = box_top + (box_height - image.height) // 2
-        canvas.paste(dithered, (x, y), mask)
 
     def _draw_footer(self, draw: ImageDraw.ImageDraw, board: Board) -> int:
         """Label, then the other sightings as one flowing line of names.
@@ -253,43 +208,189 @@ class PlateBoardRenderer:
         say is "these birds are about".
         """
         credit_height = F.line_height(self.credit)
-        bottom = self.height - MARGIN + 6
+        bottom = self.height - self.margin + 6
         listing_height = F.line_height(self.listing)
 
         names = self._also_seen_names(board)
         lines = (
-            F.wrap(SEPARATOR.join(names), self.listing, self.width - 2 * MARGIN, 2)
+            F.wrap(
+                SEPARATOR.join(names),
+                self.listing,
+                self.width - 2 * self.margin,
+                3 if self.portrait else 2,
+            )
             if names
             else []
         )
 
-        block_height = len(lines) * listing_height
         label_height = F.line_height(self.label)
-        top = bottom - credit_height - block_height - label_height - RULE_GAP
+        top = (
+            bottom
+            - credit_height
+            - len(lines) * listing_height
+            - label_height
+            - self.rule_gap
+        )
 
-        rule_y = top - RULE_GAP
-        draw.line((MARGIN, rule_y, self.width - MARGIN, rule_y), fill=int(Ink.BLACK))
+        rule_y = top - self.rule_gap
+        draw.line(
+            (self.margin, rule_y, self.width - self.margin, rule_y), fill=int(Ink.BLACK)
+        )
 
         y = top
-        _draw_tracked(draw, (MARGIN, y), FOOTER_LABEL, self.label, Ink.BLACK, 2.8)
+        _draw_tracked(draw, (self.margin, y), FOOTER_LABEL, self.label, Ink.BLACK, 2.8)
         y += label_height + 4
-
         for line in lines:
-            draw.text((MARGIN, y), line, font=self.listing, fill=int(Ink.BLACK))
+            draw.text((self.margin, y), line, font=self.listing, fill=int(Ink.BLACK))
             y += listing_height
 
         credit = board.headline_photo.credit_line if board.headline_photo else ""
         if credit:
-            width = self.credit.getlength(credit)
+            text = F.truncate(credit, self.credit, self.width - 2 * self.margin)
+            width = self.credit.getlength(text)
             draw.text(
-                (self.width - MARGIN - width, self.height - MARGIN + 8),
-                credit,
+                (self.width - self.margin - width, self.height - self.margin + 8),
+                text,
                 font=self.credit,
                 fill=int(Ink.BLACK),
             )
         return rule_y
 
-    # -- text ------------------------------------------------------------
+    # -- the subject -------------------------------------------------------
+
+    def _name_font(self, board: Board, column: float):
+        name = board.headline.species.common_name if board.headline else ""
+        return F.fit_single_line(name, "times", column, self.name_sizes)
+
+    def _portrait_text_top(self, board: Board, footer_top: int) -> int:
+        """Where the name block starts, so the picture knows where to stop.
+
+        Measured rather than guessed: a short rule, the name, the
+        scientific name and one line of detail, sitting above the footer
+        rule with air around it.
+        """
+        column = self.width - 2 * self.margin
+        font, _ = self._name_font(board, column)
+        height = 18 + F.line_height(font) + F.line_height(self.scientific) + 10
+        if board.headline and self._detail_line(board.headline):
+            height += F.line_height(self.detail) + 10
+        return int(footer_top - self.rule_gap - height)
+
+    def _draw_subject_centred(
+        self, draw: ImageDraw.ImageDraw, board: Board, top: int
+    ) -> None:
+        """Portrait: a short rule, then the names on the centre line."""
+        if board.headline is None:
+            return
+        species = board.headline.species
+        column = self.width - 2 * self.margin
+        centre = self.width // 2
+
+        draw.line((centre - 22, top, centre + 22, top), fill=int(Ink.BLACK))
+        y = top + 18
+
+        font, name = self._name_font(board, column)
+        draw.text((centre, y), name, font=font, fill=int(Ink.BLACK), anchor="ma")
+        y += F.line_height(font)
+
+        if species.scientific_name:
+            draw.text(
+                (centre, y),
+                F.truncate(species.scientific_name, self.scientific, column),
+                font=self.scientific,
+                fill=int(Ink.BLACK),
+                anchor="ma",
+            )
+            y += F.line_height(self.scientific) + 10
+
+        detail = self._detail_line(board.headline)
+        if detail:
+            draw.text(
+                (centre, y),
+                F.truncate(detail, self.detail, column),
+                font=self.detail,
+                fill=int(Ink.BLACK),
+                anchor="ma",
+            )
+
+    def _draw_subject_left(
+        self, draw: ImageDraw.ImageDraw, board: Board, header_bottom: int
+    ) -> None:
+        """Landscape: the species, large, in the left third."""
+        if board.headline is None:
+            return
+        species = board.headline.species
+        column = 360
+
+        font, name = self._name_font(board, column)
+        y = header_bottom + 74
+        draw.text((self.margin, y), name, font=font, fill=int(Ink.BLACK))
+        y += F.line_height(font) - 6
+
+        if species.scientific_name:
+            draw.text(
+                (self.margin, y),
+                F.truncate(species.scientific_name, self.scientific, column),
+                font=self.scientific,
+                fill=int(Ink.BLACK),
+            )
+            y += F.line_height(self.scientific) + 22
+
+        draw.line((self.margin, y, self.margin + 46, y), fill=int(Ink.BLACK))
+        y += 20
+
+        detail = self._detail_line(board.headline)
+        if detail:
+            draw.text(
+                (self.margin, y),
+                F.truncate(detail, self.detail, column),
+                font=self.detail,
+                fill=int(Ink.BLACK),
+            )
+
+    # -- the picture -------------------------------------------------------
+
+    def _draw_image(
+        self,
+        canvas: Image.Image,
+        image: Image.Image,
+        top: int,
+        bottom: int,
+        left: int | None = None,
+    ) -> None:
+        """Put the bird in the space between the rules.
+
+        A cut-out plate is fitted whole and pasted through its own alpha,
+        so the paper around it stays flat white ink -- quantising the whole
+        rectangle would dither the background too, and a faint checkerboard
+        of stray ink around the bird is what makes a six-colour panel look
+        cheap. A photograph has no such edge, so it is cropped to fill.
+        """
+        box_left = self.margin if left is None else left
+        box_width = self.width - self.margin - box_left
+        box_height = bottom - top
+        if box_width <= 0 or box_height <= 0:
+            return
+
+        if "A" in image.getbands():
+            plate = image.convert("RGBA")
+            plate = _fit_contain(plate, box_width, box_height)
+            flattened = Image.new("RGB", plate.size, (255, 255, 255))
+            flattened.paste(plate, mask=plate.split()[3])
+            dithered = quantize_photo(
+                flattened, self.config.plates.enhancement, self.config.palette
+            )
+            mask = plate.split()[3].point(lambda a: 255 if a > 128 else 0)
+            x = box_left + (box_width - plate.width) // 2
+            y = top + (box_height - plate.height) // 2
+            canvas.paste(dithered, (x, y), mask)
+            return
+
+        photo = fit_cover(image.convert("RGB"), box_width, box_height)
+        dithered = quantize_photo(photo, self.config.image, self.config.palette)
+        canvas.paste(dithered, (box_left, top))
+
+    # -- text --------------------------------------------------------------
 
     def _detail_line(self, sighting: Sighting) -> str:
         bits: list[str] = []
@@ -316,17 +417,13 @@ class PlateBoardRenderer:
     def _shorten_to(self, text: str, font, limit: float, tracking: float) -> str:
         while text and _tracked_width(text, font, tracking) > limit:
             text = text[:-1]
-        return text.rstrip(" ,")
+        return text.rstrip(" ,-")
 
 
 def render_board(
     config: Config,
     board: Board,
-    plate: Image.Image | None,
+    image: Image.Image | None,
     now: datetime | None = None,
 ) -> Image.Image:
-    return PlateBoardRenderer(config).render(board, plate, now)
-
-
-def sightings_from(board: Board) -> Sequence[Sighting]:
-    return board.also_seen
+    return PlateBoardRenderer(config).render(board, image, now)

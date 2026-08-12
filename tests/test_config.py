@@ -56,7 +56,8 @@ def _tweaked(tmp_path, key: str, new: str):
         ("back_days", "back_days = 40", "back_days"),
         ("notable_back_days", "notable_back_days = 90", "notable_back_days"),
         ("backend", 'backend = "hologram"', "backend"),
-        ("rotate", "rotate = 90", "rotate"),
+        # 90 and 270 are portrait; 45 is not a thing a frame can do.
+        ("rotate", "rotate = 45", "rotate"),
     ],
 )
 def test_invalid_values_are_rejected_at_load_time(tmp_path, key, new, message):

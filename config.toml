@@ -94,9 +94,10 @@ height = 480
 # "epaper" or "preview". --preview on the command line overrides this.
 backend = "preview"
 preview_path = "preview.png"
-# Rotate the composed board by this many degrees before sending it to the
-# panel: 0 or 180, depending on which way up the frame hangs.
-rotate = 0
+# How the frame hangs. 0 and 180 are landscape; 90 and 270 turn it on its
+# side, and the board is composed 480x800 and rotated on the way to the
+# panel -- the glass itself is always 800x480.
+rotate = 90
 
 # How the six inks LOOK. Used only to render preview PNGs -- the panel
 # itself is sent ink indices, so changing these cannot change what it

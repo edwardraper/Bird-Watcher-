@@ -99,23 +99,33 @@ WORKS: tuple[tuple[str, str, int], ...] = (
 # "Gallinula's bills" is a genuine Keulemans drawing of a genuine moorhen,
 # and it is eight beaks in a row.
 NOT_A_PLATE = (
-    "vol.",
-    "vol ",
+    "vol",
     "volume",
-    "title page",
+    "title",
     "frontispiece",
     "cover",
     "binding",
+    "map",
+    # Anatomical figures. Keulemans drew a great many, they are correctly
+    # identified and correctly attributed, and they are a page of claws.
+    "head",
+    "heads",
+    "bill",
     "bills",
+    "beak",
     "beaks",
-    "heads of",
-    "feet of",
+    "claw",
+    "claws",
+    "talon",
+    "talons",
+    "foot",
+    "feet",
+    "egg",
     "eggs",
-    "egg of",
     "skull",
     "sternum",
     "anatomy",
-    "map",
+    "tongue",
 )
 
 # Other artists who worked on the same volumes. If one of them signed the
@@ -515,7 +525,9 @@ def score_candidate(
         return candidate
 
     lowered_title = candidate.title.lower()
-    if any(word in lowered_title for word in NOT_A_PLATE):
+    # Whole words: "head" must not match "Red-headed", and "egg" must not
+    # match a photographer called Eggleston.
+    if set(_WORD_RE.findall(lowered_title)) & set(NOT_A_PLATE):
         candidate.score = -100
         candidate.evidence = ["a volume or cover, not a plate"]
         return candidate
@@ -570,9 +582,15 @@ def score_candidate(
                 evidence.append("in the species' Commons category")
                 break
             if lowered.startswith(f"{name.lower()} "):
-                # A trinomial category: the right species, a foreign race.
-                species_score += 6
-                evidence.append(f"in a subspecies category ({cat})")
+                parts = lowered.split()
+                if len(parts) >= 3 and parts[1] == parts[2]:
+                    # Phalacrocorax carbo carbo: the nominate race is the
+                    # species, not a foreign form of it.
+                    species_score += 20
+                    evidence.append(f"in the nominate race's category ({cat})")
+                else:
+                    species_score += 6
+                    evidence.append(f"in a subspecies category ({cat})")
                 break
         else:
             continue
@@ -584,9 +602,16 @@ def score_candidate(
 
     claimed = _filename_binomial(candidate.filename)
     if claimed and not any(_binomial_matches(claimed, w) for w in wanted):
-        # The filename names some other bird, whatever the categories say.
-        species_score -= 40
-        evidence.append(f"filename names {claimed[0].title()} {claimed[1]}")
+        # A run-together filename is somebody naming the taxon, and it
+        # outranks everything else on the page. Refused outright rather
+        # than penalised: SyrniumBiddulphiKeulemans.jpg is a Himalayan
+        # race of tawny owl, correctly filed under Strix aluco, and it
+        # collected enough points elsewhere to survive a mere penalty.
+        candidate.score = -100
+        candidate.evidence = evidence + [
+            f"filename names {claimed[0].title()} {claimed[1]}"
+        ]
+        return candidate
 
     words = entry.common_name.lower().split()
     if len(words) > 1 and _has_phrase(candidate.caption, entry.common_name):
@@ -987,7 +1012,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--work-dir", type=Path, default=DEFAULT_WORK_DIR)
     parser.add_argument("--exclusions", type=Path, default=DEFAULT_EXCLUSIONS)
     parser.add_argument("--report", type=Path, help="write a per-species JSON report")
-    parser.add_argument("--limit", type=int, help="only the first N species")
+    parser.add_argument("--limit", type=int, help="only N species")
+    parser.add_argument(
+        "--skip",
+        type=int,
+        default=0,
+        help="skip the first N species. With --limit and --update, this is "
+        "how the next batch gets built without re-deciding the last one",
+    )
     parser.add_argument("--only", action="append", help="one species (any name); repeatable")
     parser.add_argument("--longest-edge", type=int, default=900)
     parser.add_argument("--quality", type=int, default=82)
@@ -1018,6 +1050,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             for e in entries
             if e.common_name.lower() in wanted or e.scientific_name.lower() in wanted
         ]
+    if args.skip:
+        entries = entries[args.skip :]
     if args.limit:
         entries = entries[: args.limit]
     if not entries:

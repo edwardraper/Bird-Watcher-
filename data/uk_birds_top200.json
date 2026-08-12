@@ -384,13 +384,18 @@
    "rank": 53,
    "common_name": "Cormorant",
    "scientific_name": "Phalacrocorax carbo",
-   "synonyms": []
+   "synonyms": [
+    "Carbo cormoranus",
+    "Graculus carbo"
+   ]
   },
   {
    "rank": 54,
    "common_name": "Canada Goose",
    "scientific_name": "Branta canadensis",
-   "synonyms": []
+   "synonyms": [
+    "Bernicla canadensis"
+   ]
   },
   {
    "rank": 55,
@@ -414,7 +419,8 @@
    "common_name": "Great Crested Grebe",
    "scientific_name": "Podiceps cristatus",
    "synonyms": [
-    "Podicipes cristatus"
+    "Podicipes cristatus",
+    "Colymbus cristatus"
    ]
   },
   {
@@ -423,7 +429,9 @@
    "scientific_name": "Tachybaptus ruficollis",
    "synonyms": [
     "Podiceps fluviatilis",
-    "Tachybaptes fluviatilis"
+    "Tachybaptes fluviatilis",
+    "Podiceps minor",
+    "Colymbus minor"
    ]
   },
   {
@@ -742,14 +750,17 @@
    "common_name": "Goldeneye",
    "scientific_name": "Bucephala clangula",
    "synonyms": [
-    "Clangula glaucion"
+    "Clangula glaucion",
+    "Fuligula clangula"
    ]
   },
   {
    "rank": 100,
    "common_name": "Goosander",
    "scientific_name": "Mergus merganser",
-   "synonyms": []
+   "synonyms": [
+    "Mergus castor"
+   ]
   },
   {
    "rank": 101,
