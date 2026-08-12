@@ -5,9 +5,69 @@
    "file": "CBBM02 249.png",
    "species": "Tawny Owl",
    "reason": "A study of a tawny owl's talons -- four claws on a blank page. Right artist, right bird, and nothing in the filename to say so."
+  },
+  {
+   "file": "Coloured figures of the birds of the British Islands - issued by Lord Lilford (Plate XXV) (20130813418).jpg",
+   "species": "Great Black-backed Gull",
+   "reason": "A fine plate that the cutout beheads. The gull is standing with its white head and neck against the pale shore, the head is the same tone as the paper and joined to it, so the flood fill walks straight up the neck and takes the lot: what lands on the board is a black-backed body on pink legs with nothing above the shoulders."
+  },
+  {
+   "file": "Coloured figures of the birds of the British Islands - issued by Lord Lilford (Plate XXII) (20310404102).jpg",
+   "species": "Common Gull",
+   "reason": "The same beheading as the great black-backed gull, on the same shore-and-sand background, and here it takes the bill as well. What is left is a grey mantle on one leg in a lot of empty sand -- more beach than bird even before the head went."
+  },
+  {
+   "file": "Coloured figures of the birds of the British Islands - issued by Lord Lilford (Plate XXIX) (20318870755).jpg",
+   "species": "Kittiwake",
+   "reason": "Two whole kittiwakes on a nest, and beside them a tall pale stripe the scanner caught at the edge of the facing page. It survives the cutout as its own blob, so the board would carry a vertical rule standing to the right of the birds like a doorframe."
+  },
+  {
+   "file": "Monographofp119071910godm 0146AAA.JPG",
+   "species": "Storm Petrel",
+   "reason": "Keulemans, from Godman's monograph of the petrels, and it is a white-faced storm petrel: white below, a dark mask through the eye, long legs and yellow-webbed feet. Ours is sooty all over with a white rump. The file is named after the volume rather than the bird, so nothing but the picture gives it away."
+  },
+  {
+   "file": "Oceanodroma.macrodactyla.jpg",
+   "species": "Storm Petrel",
+   "reason": "The second wrong petrel in a row, and a closer one: a Guadalupe storm petrel, forked-tailed and all dark where ours carries a white rump, from an island in the Pacific and extinct since about 1912. Every Keulemans petrel on Commons is a portrait of some petrel, and the search cannot tell which."
+  },
+  {
+   "file": "Petrel Keulemans.jpg",
+   "species": "Storm Petrel",
+   "reason": "This one does contain our bird -- and a Wilson's petrel beside it, and a downy chick, and the German caption naming all three, and a ruled white border the cutout cannot get past, so the whole page arrives as a rectangle. Two species and a block of type is a page from a book, not a portrait."
+  },
+  {
+   "file": "Bul02BirdP028.jpg",
+   "species": "Bar-tailed Godwit",
+   "reason": "Not a scan of a plate but a photograph of an open book: page edges, binding, the shadow of the gutter. The cutout has no paper to remove and keeps the whole spread, captions and all -- and the captions are two species, the Chatham Island snipe next to the godwit."
+  },
+  {
+   "file": "Slender-billed curlew (Naumann).jpg",
+   "species": "Whimbrel",
+   "reason": "Three curlews on a rock, and the one in the middle -- the one the plate is named for and drawn around -- is a slender-billed curlew. The whimbrels are the supporting cast. A painted sky and sea behind them as well, so there is nothing to cut away either."
   }
  ],
  "excluded_works": [
+  {
+   "species": "Great Black-backed Gull",
+   "work": "Coloured figures of the birds of the British Islands",
+   "reason": "Lilford drew this gull once and Commons holds half a dozen scans of that one plate, so excluding a file only moves the builder onto the next copy of the same picture. The bird stands with its white head against pale sand, the head is paper-coloured and joined to the paper, and the cutout takes it away every time. The plate is not at fault; we simply cannot use it, and a headless gull is worse than a photograph."
+  },
+  {
+   "species": "Common Gull",
+   "work": "Coloured figures of the birds of the British Islands",
+   "reason": "The same plate, the same white head on the same pale shore, the same beheading in every scan of it. Refused as a work for the same reason as the great black-backed gull: there is nothing else in Lilford for this bird to fall back to."
+  },
+  {
+   "species": "Kittiwake",
+   "work": "Ornithological miscellany",
+   "reason": "A floating cask in a heavy sea with a dozen kittiwakes on and around it, sky to the top of the page. The same failure this journal gives the black-headed gull -- a seascape with birds in it rather than a bird -- and at 480px the cask reads better than any of them."
+  },
+  {
+   "species": "Storm Petrel",
+   "work": "Ornithological miscellany",
+   "reason": "Mother Carey herself: a witch on a broomstick over a wrecking sea, with a hundred petrels the size of commas around her and rays of light coming through the cloud. A famous plate and a lovely one, and the bird in it is a motif rather than a subject. After two wrong petrel species this was the third refusal for this bird, and it is the point at which no plate is the right answer."
+  },
   {
    "species": "Black-headed Gull",
    "work": "Ornithological miscellany",
