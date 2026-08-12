@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from birddisplay.config import ConfigError, load_config
@@ -28,32 +30,38 @@ def test_missing_api_key_is_a_clear_error(monkeypatch):
         _ = config.ebird.api_key
 
 
-def _tweaked(tmp_path, old: str, new: str):
-    """The shipped config with one line swapped out."""
+def _tweaked(tmp_path, key: str, new: str):
+    """The shipped config with one setting swapped out.
+
+    Matched on the setting's key at the start of a line, not on its
+    current value: these tests are about the validation rules, and moving
+    the display to another county should not break them.
+    """
     source = (REPO_ROOT / "config.toml").read_text(encoding="utf-8")
-    assert old in source, f"{old!r} is no longer in config.toml"
+    pattern = re.compile(rf"^{re.escape(key)}\s*=.*$", re.MULTILINE)
+    assert pattern.search(source), f"no {key} setting in config.toml"
     path = tmp_path / "config.toml"
-    path.write_text(source.replace(old, new), encoding="utf-8")
+    path.write_text(pattern.sub(new, source, count=1), encoding="utf-8")
     return path
 
 
 @pytest.mark.parametrize(
-    "old, new, message",
+    "key, new, message",
     [
-        ("lat = 50.7236", "lat = 200.0", "out of range"),
-        ("lng = -3.5275", "lng = -400.0", "out of range"),
+        ("lat", "lat = 200.0", "out of range"),
+        ("lng", "lng = -400.0", "out of range"),
         # eBird caps dist at 50km and back at 30 days. Failing at load
         # time beats a 400 from the API at 06:50 on a Sunday.
-        ("radius_km = 30", "radius_km = 99", "radius_km"),
-        ("\nback_days = 5", "\nback_days = 40", "back_days"),
-        ("notable_back_days = 7", "notable_back_days = 90", "notable_back_days"),
-        ('backend = "preview"', 'backend = "hologram"', "backend"),
-        ("rotate = 0", "rotate = 90", "rotate"),
+        ("radius_km", "radius_km = 99", "radius_km"),
+        ("back_days", "back_days = 40", "back_days"),
+        ("notable_back_days", "notable_back_days = 90", "notable_back_days"),
+        ("backend", 'backend = "hologram"', "backend"),
+        ("rotate", "rotate = 90", "rotate"),
     ],
 )
-def test_invalid_values_are_rejected_at_load_time(tmp_path, old, new, message):
+def test_invalid_values_are_rejected_at_load_time(tmp_path, key, new, message):
     with pytest.raises(ConfigError, match=message):
-        load_config(_tweaked(tmp_path, old, new))
+        load_config(_tweaked(tmp_path, key, new))
 
 
 def test_an_empty_user_agent_is_rejected(tmp_path):

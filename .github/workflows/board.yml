@@ -1,0 +1,129 @@
+# Render the board every two hours and publish it where the frame can get it.
+#
+# This is the half of the project that used to be a Raspberry Pi. The Inky
+# Frame is a Pico 2 W: it cannot run Python 3, Pillow or SQLite, and the
+# plate database is fifty times its free flash. So the runner does the
+# work -- eBird, plate lookup, layout, six-ink dithering -- and publishes
+# an 800x480 PNG plus a small manifest to the `board` branch. The frame
+# wakes up, downloads them, and goes back to sleep.
+#
+#   https://raw.githubusercontent.com/edwardraper/Bird-Watcher-/board/board.png
+#
+# The failure posture is the one the Pi had: if the fetch fails, nothing is
+# published, and the frame keeps showing the board it already has.
+
+name: board
+
+on:
+  schedule:
+    # Every two hours at :50. GitHub's scheduler is best-effort and can run
+    # late under load, which does not matter here: the frame compares a sha
+    # rather than trusting the clock.
+    - cron: "50 */2 * * *"
+  workflow_dispatch:
+  push:
+    # Rendering changes should be visible without waiting for the hour.
+    # Only from the default branch: a feature branch must not publish a
+    # board to the frame on someone's wall.
+    branches:
+      - main
+      - claude/bird-eink-display-fdblij
+    paths:
+      - "birddisplay/**"
+      - "config.toml"
+      - "assets/plates/**"
+      - ".github/workflows/board.yml"
+
+concurrency:
+  group: board
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        # Pillow only. numpy and scipy belong to scripts/build_plate_db.py,
+        # which runs on a laptop when plates are added, never here.
+        run: pip install -e .
+
+      - name: Restore the eBird taxonomy
+        # ~17k rows, ~3.5MB, refetched at most monthly. A cache miss costs
+        # one extra API call, not a failure.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/birddisplay/taxonomy.json
+          key: ebird-taxonomy-${{ github.run_id }}
+          restore-keys: ebird-taxonomy-
+
+      - name: Restore which birds have been featured recently
+        # This is the state that stops the wall showing a woodpigeon three
+        # days running. A fresh runner has no memory of yesterday, so the
+        # rotation lives on the board branch and comes back each run.
+        run: |
+          mkdir -p ~/.cache/birddisplay
+          if git fetch --depth 1 origin board 2>/dev/null; then
+            git show origin/board:state.json > ~/.cache/birddisplay/state.json || true
+            echo "restored the featured-species memory"
+          else
+            echo "no board branch yet; starting with a clean rotation"
+          fi
+
+      - name: Fetch sightings
+        env:
+          EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
+        # Non-zero here means the cache was left untouched, so the step
+        # fails and nothing is published. The frame keeps the old board.
+        run: python -m birddisplay.fetch -v
+
+      - name: Render the board
+        run: python -m birddisplay.show --backend inky --preview-path board.png -v
+
+      - name: Publish to the board branch
+        run: |
+          set -euo pipefail
+          cp ~/.cache/birddisplay/state.json state.json 2>/dev/null || echo '{}' > state.json
+
+          # Published every run, even when the picture is identical: the
+          # rotation memory in state.json still moves, and the frame does
+          # not need us to be clever here -- it compares the sha in
+          # board.json and skips the download and the thirty-second panel
+          # refresh by itself.
+          #
+          # An orphan branch, force-pushed as a single commit: twelve
+          # binaries a day would otherwise be a gigabyte of history a year.
+          # --global because the commit is made in the throwaway repo
+          # below, which inherits nothing from this checkout.
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf .publish && mkdir .publish
+          cp board.png board.json state.json .publish/
+          cd .publish
+          git init -q -b board
+          git add board.png board.json state.json
+          git commit -q -m "Board for $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push -q --force \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+            board
+
+      - name: Keep the board where a failed run can be looked at
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: board
+          path: |
+            board.png
+            board.json
+          if-no-files-found: ignore
+          retention-days: 7

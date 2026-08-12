@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import tomllib
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,24 @@ class RegionConfig:
     radius_km: int
     back_days: int
     notable_back_days: int
+    timezone: str = "Europe/London"
+
+    @property
+    def tzinfo(self) -> ZoneInfo | None:
+        """Where the display hangs, for anything it prints.
+
+        The renderer used to run on the same Pi as the panel, where the
+        system clock was already local. It now runs on a GitHub runner set
+        to UTC, while eBird reports sightings in British local time -- so
+        without this the board would print a UTC date over local times,
+        and for an hour around midnight in summer, the wrong date.
+        """
+        try:
+            return ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            # A missing tz database is not worth a blank wall; fall back
+            # to the system clock, which on the Pi is right anyway.
+            return None
 
 
 @dataclass(frozen=True)
@@ -87,6 +106,40 @@ class BoardConfig:
 
 
 @dataclass(frozen=True)
+class PlatesConfig:
+    """The Keulemans plate database, if there is one.
+
+    Optional in every direction: the section may be absent, the file may
+    be missing, and either way the board falls back to photographs.
+    """
+
+    enabled: bool
+    path: Path
+    prefer_plates: bool
+    saturation: float = 1.05
+    contrast: float = 1.25
+    sharpness: float = 1.20
+
+    @property
+    def enhancement(self) -> "ImageConfig":
+        """Pre-dither treatment for a plate, which is not a photograph.
+
+        [image] pushes saturation hard because photographic mid-tones
+        smear when they are reduced to six inks. Doing that to a pale
+        lithograph turns the paper into orange confetti; a drawing has
+        flat colour already and wants contrast instead, to hold the bird
+        apart from the ground. request_width is unused here -- plates come
+        off the disk at the size they were built.
+        """
+        return ImageConfig(
+            saturation=self.saturation,
+            contrast=self.contrast,
+            sharpness=self.sharpness,
+            request_width=0,
+        )
+
+
+@dataclass(frozen=True)
 class ImageConfig:
     saturation: float
     contrast: float
@@ -101,6 +154,9 @@ class DisplayConfig:
     backend: str
     preview_path: Path
     rotate: int
+    # Where the "inky" backend writes the board for the frame to fetch.
+    # Its .json sidecar sits beside it.
+    export_path: Path = Path("board.png")
 
 
 # Nominal primaries, used to decide which ink each pixel becomes. These
@@ -151,6 +207,7 @@ class Config:
     http: HttpConfig
     cache: CacheConfig
     board: BoardConfig
+    plates: PlatesConfig
     image: ImageConfig
     display: DisplayConfig
     palette: PaletteConfig
@@ -197,6 +254,7 @@ def load_config(path: Path | str | None = None) -> Config:
         radius_km=int(region_raw.get("radius_km", 25)),
         back_days=int(region_raw.get("back_days", 5)),
         notable_back_days=int(region_raw.get("notable_back_days", 7)),
+        timezone=str(region_raw.get("timezone", "Europe/London")),
     )
     # eBird enforces these server-side; failing here gives a better message
     # than a 400 from the API at 06:50 on a Sunday.
@@ -243,6 +301,22 @@ def load_config(path: Path | str | None = None) -> Config:
         prefer_notable=bool(board_raw.get("prefer_notable", True)),
     )
 
+    # Optional section: a config written before the plate database existed
+    # is still a valid config, and the defaults are what this repository
+    # ships.
+    plates_raw = data.get("plates") or {}
+    plates_path = Path(str(plates_raw.get("path", "assets/plates/keulemans_uk.sqlite")))
+    if not plates_path.is_absolute():
+        plates_path = config_path.resolve().parent / plates_path
+    plates = PlatesConfig(
+        enabled=bool(plates_raw.get("enabled", True)),
+        path=plates_path,
+        prefer_plates=bool(plates_raw.get("prefer_plates", True)),
+        saturation=float(plates_raw.get("saturation", 1.05)),
+        contrast=float(plates_raw.get("contrast", 1.25)),
+        sharpness=float(plates_raw.get("sharpness", 1.20)),
+    )
+
     image_raw = _section(data, "image")
     image = ImageConfig(
         saturation=float(image_raw.get("saturation", 1.3)),
@@ -258,9 +332,12 @@ def load_config(path: Path | str | None = None) -> Config:
         backend=str(display_raw.get("backend", "preview")).lower(),
         preview_path=Path(str(display_raw.get("preview_path", "preview.png"))).expanduser(),
         rotate=int(display_raw.get("rotate", 0)),
+        export_path=Path(str(display_raw.get("export_path", "board.png"))).expanduser(),
     )
-    if display.backend not in {"epaper", "preview"}:
-        raise ConfigError('[display].backend must be "epaper" or "preview"')
+    if display.backend not in {"epaper", "preview", "inky"}:
+        raise ConfigError(
+            '[display].backend must be "epaper", "preview" or "inky"'
+        )
     if display.rotate not in {0, 180}:
         raise ConfigError("[display].rotate must be 0 or 180")
 
@@ -289,6 +366,7 @@ def load_config(path: Path | str | None = None) -> Config:
         http=http,
         cache=cache,
         board=board,
+        plates=plates,
         image=image,
         display=display,
         palette=palette,

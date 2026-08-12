@@ -51,6 +51,29 @@ FONT_CANDIDATES: dict[str, tuple[str, ...]] = {
         "FreeSerifItalic.ttf",
         "DejaVuSerif.ttf",
     ),
+    # Times New Roman itself is Monotype's and ships with neither Raspberry
+    # Pi OS nor most Linux boxes. Liberation Serif is metric-compatible with
+    # it and is what a Pi actually has, so it leads; drop the real thing
+    # into assets/fonts/ and it wins, because that directory is searched
+    # first. DejaVu Serif last: wider and rounder, but always present.
+    "times": (
+        "Times New Roman.ttf",
+        "times.ttf",
+        "LiberationSerif-Regular.ttf",
+        "DejaVuSerif.ttf",
+    ),
+    "times_italic": (
+        "Times New Roman Italic.ttf",
+        "timesi.ttf",
+        "LiberationSerif-Italic.ttf",
+        "DejaVuSerif-Italic.ttf",
+    ),
+    "times_bold": (
+        "Times New Roman Bold.ttf",
+        "timesbd.ttf",
+        "LiberationSerif-Bold.ttf",
+        "DejaVuSerif-Bold.ttf",
+    ),
 }
 
 ELLIPSIS = "…"

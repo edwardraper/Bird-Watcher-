@@ -11,7 +11,7 @@ exact ink colours and is never dithered.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from PIL import Image, ImageDraw, UnidentifiedImageError
@@ -74,6 +74,14 @@ def _load_photo(path: str | None) -> Image.Image | None:
         return None
     try:
         with Image.open(file_path) as handle:
+            handle.load()
+            if "A" in handle.getbands():
+                # A cut-out plate drawn on the photo board: flatten it onto
+                # white rather than letting convert("RGB") fill the paper
+                # with black.
+                flattened = Image.new("RGB", handle.size, (255, 255, 255))
+                flattened.paste(handle, mask=handle.convert("RGBA").split()[3])
+                return flattened
             return handle.convert("RGB")
     except (OSError, UnidentifiedImageError) as exc:
         log.warning("could not read %s: %s", file_path, exc)
@@ -89,8 +97,26 @@ class BoardRenderer:
 
     # -- public ----------------------------------------------------------
 
+    def _local(self, now: datetime | None) -> datetime:
+        """The wall clock where the display hangs.
+
+        The renderer used to run on the same Pi as the panel, so the system
+        clock was already right. It now also runs on a GitHub runner set to
+        UTC, while eBird reports British local time -- printing one over the
+        other is how a board ends up dated yesterday. An aware time handed
+        in is converted rather than trusted; a naive one is left alone,
+        because the only thing that passes naive times is a machine whose
+        clock is already local.
+        """
+        zone = self.config.region.tzinfo
+        if now is None:
+            return datetime.now(zone or timezone.utc)
+        if now.tzinfo is not None and zone is not None:
+            return now.astimezone(zone)
+        return now
+
     def render(self, board: Board, now: datetime | None = None) -> Image.Image:
-        now = now or datetime.now()
+        now = self._local(now)
         stale = board.is_stale(self.config.cache.max_age_hours)
 
         photo = None
@@ -420,7 +446,9 @@ class BoardRenderer:
             text = f"DATA STALE · {age / 24:.0f}d old · check the fetcher"
             ink = Ink.RED
         else:
-            stamp = board.generated_at.astimezone().strftime("%H:%M")
+            stamp = board.generated_at.astimezone(
+                self.config.region.tzinfo
+            ).strftime("%H:%M")
             text = f"Updated {stamp} · data from eBird"
             ink = Ink.BLACK
 

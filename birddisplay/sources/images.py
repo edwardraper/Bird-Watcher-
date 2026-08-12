@@ -26,6 +26,7 @@ from ..cache import write_json_atomic
 from ..config import Config
 from ..model import Photo, Species
 from .http import FetchError, HttpClient
+from .plates import PlateStore
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +71,14 @@ class ImageSource:
         self.config = config
         self.http = http
         self.cache_dir = config.cache.image_dir
+        # Opened once per run and never re-checked: a plate database that
+        # is missing or unreadable is not an error, it just means every
+        # bird comes from Wikimedia as it did before plates existed.
+        self.plates = (
+            PlateStore.maybe(config.plates.path) if config.plates.enabled else None
+        )
+        if self.plates is not None:
+            log.debug("plate database open: %d plates", self.plates.count())
 
     # -- disk cache ------------------------------------------------------
 
@@ -199,12 +208,46 @@ class ImageSource:
 
     # -- public ----------------------------------------------------------
 
+    def _plate(self, species: Species) -> Photo | None:
+        """The Keulemans plate for this bird, if the database has one."""
+        if self.plates is None:
+            return None
+        plate = self.plates.get(species)
+        if plate is None:
+            return None
+        try:
+            photo = plate.as_photo(self.cache_dir)
+        except OSError as exc:
+            log.warning("could not write the plate for %s: %s", species.code, exc)
+            return None
+        log.info("using the %s plate for %s", plate.work or "Keulemans", species.code)
+        return photo
+
     def photo_for(self, species: Species, refresh: bool = False) -> Photo:
-        """Get a local JPEG plus attribution for a species.
+        """Get a local image plus attribution for a species.
+
+        The plate database is consulted first: it is on disk, so it costs
+        no network, cannot be rate-limited, and a lithograph survives six
+        inks better than a photograph. Wikimedia covers everything else.
 
         Raises ImageUnavailable if there is nothing usable; the caller
         should try another species or fall back to a text-only board.
         """
+        prefer_plates = self.config.plates.prefer_plates
+        if prefer_plates:
+            plate = self._plate(species)
+            if plate is not None:
+                return plate
+        try:
+            return self._wikimedia_photo(species, refresh)
+        except (ImageUnavailable, FetchError):
+            if not prefer_plates:
+                plate = self._plate(species)
+                if plate is not None:
+                    return plate
+            raise
+
+    def _wikimedia_photo(self, species: Species, refresh: bool = False) -> Photo:
         if not refresh:
             cached = self.cached(species.code)
             if cached is not None:

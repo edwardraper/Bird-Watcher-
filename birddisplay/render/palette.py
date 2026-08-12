@@ -43,6 +43,21 @@ class Ink(IntEnum):
 # Internal index -> the 4-bit code the panel expects on the wire.
 WIRE_CODES = (0x0, 0x1, 0x2, 0x3, 0x5, 0x6)
 
+# Internal index -> the pen index PicoGraphics uses on an Inky Frame.
+# Same idea as WIRE_CODES, different hardware: Pimoroni's PEN_3BIT order
+# is BLACK, WHITE, GREEN, BLUE, RED, YELLOW (then ORANGE and TAUPE, the
+# panel's cleaning colour), where ours is Spectra 6 wire order. Yellow and
+# green swap, red and blue swap.
+INKY_PEN_CODES = (0, 1, 5, 4, 3, 2)
+
+# How those eight pens look, for the benefit of anything that opens the
+# exported PNG as a picture. The frame never reads these: pngdec in
+# PNG_COPY mode copies the palette *indices* straight into the
+# framebuffer, which is the whole reason the board's text survives the
+# journey un-dithered.
+INKY_SLOT_ORDER = (Ink.BLACK, Ink.WHITE, Ink.GREEN, Ink.BLUE, Ink.RED, Ink.YELLOW)
+INKY_EXTRA_RGB = ((243, 132, 30), (200, 190, 175))  # orange, taupe
+
 # Fallback RGB values, used when no PaletteConfig is supplied (tests,
 # scripts). config.toml is the place to tune these.
 DEFAULT_RGB: tuple[tuple[int, int, int], ...] = (
@@ -163,6 +178,44 @@ def prepare_photo(
 ) -> Image.Image:
     """Crop to the panel slot and dither. Returns a "P" image."""
     return quantize_photo(fit_cover(image, width, height), settings, palette)
+
+
+def to_inky_png(
+    canvas: Image.Image, palette: PaletteConfig | None = None
+) -> Image.Image:
+    """Reindex a finished board into Inky Frame pen order.
+
+    The result is still a palettised image, and that is the point. The
+    frame decodes it with pngdec in PNG_COPY mode, which copies palette
+    indices into the framebuffer without dithering or snapping, so every
+    pixel we chose is the pixel that reaches the glass. Sending a JPEG --
+    which is what Pimoroni's own examples do -- would put Floyd-Steinberg
+    through 11px type and turn the digest into mush.
+
+    Two things must not happen to this image afterwards: do not let
+    anything re-quantise it, and do not save it with optimize=True, which
+    lets Pillow drop unused palette entries and renumber the rest. The
+    indices *are* the message.
+    """
+    if canvas.mode != "P":
+        raise ValueError("to_inky_png expects a palettised board")
+
+    # bytes.translate is a C-speed 256-entry lookup over 384,000 pixels.
+    table = bytes(
+        INKY_PEN_CODES[index] if index < len(INKY_PEN_CODES) else index
+        for index in range(256)
+    )
+    reindexed = Image.frombytes("P", canvas.size, canvas.tobytes().translate(table))
+
+    rgb = rgb_table(palette)
+    slots = [rgb[int(ink)] for ink in INKY_SLOT_ORDER]
+    slots.extend(INKY_EXTRA_RGB)
+    flat: list[int] = []
+    for channel in slots:
+        flat.extend(channel)
+    flat.extend([0, 0, 0] * (256 - len(slots)))
+    reindexed.putpalette(flat)
+    return reindexed
 
 
 def to_rgb(canvas: Image.Image, palette: PaletteConfig | None = None) -> Image.Image:
