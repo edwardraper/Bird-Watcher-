@@ -58,14 +58,44 @@ class EbirdClient:
     def notable(
         self, *, region_code: str | None = None, back_days: int | None = None
     ) -> list[dict[str, Any]]:
-        """Notable (locally rare or out of season) sightings for a region."""
+        """Notable (locally rare or out of season) sightings.
+
+        By radius when the config asks for it, which is the honest
+        pairing: the "seen nearby" list is a circle around lat/lng, and a
+        county is not. Derbyshire runs about ninety kilometres north to
+        south, so the region form can headline the board with a rare bird
+        seen an hour's drive away and call it local.
+
+        The cost is real and worth knowing: a rare bird is rare, and a
+        sixteen-kilometre circle will often contain none at all. Then the
+        board simply has no rare headline and shows the rotation instead,
+        which it already handles.
+        """
         region = self.config.region
-        code = region_code or region.code
-        params = {
-            "back": min(back_days or region.notable_back_days, MAX_BACK_DAYS),
+        back = min(back_days or region.notable_back_days, MAX_BACK_DAYS)
+        params: dict[str, Any] = {
+            "back": back,
             "detail": "full",
             "sppLocale": self.config.ebird.locale,
         }
+
+        if region_code is None and region.notable_within_radius:
+            params.update(
+                {
+                    "lat": region.lat,
+                    "lng": region.lng,
+                    "dist": min(region.radius_km, MAX_DIST_KM),
+                }
+            )
+            data = self._get("/data/obs/geo/recent/notable", params)
+            log.info(
+                "eBird returned %d notable observations within %d km",
+                len(data),
+                params["dist"],
+            )
+            return data
+
+        code = region_code or region.code
         data = self._get(f"/data/obs/{code}/recent/notable", params)
         log.info("eBird returned %d notable observations for %s", len(data), code)
         return data

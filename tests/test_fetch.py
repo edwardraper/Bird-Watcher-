@@ -120,7 +120,7 @@ def test_build_board_produces_a_renderable_payload(
     assert board.headline.species.code not in {s.species.code for s in board.also_seen}
     # 12 raw records, one of which is a duplicate robin.
     assert board.species_count == 11
-    assert "30 km" in board.checklist_note
+    assert f"{config.region.radius_km} km" in board.checklist_note
 
 
 def test_build_board_without_an_image_source_still_builds(

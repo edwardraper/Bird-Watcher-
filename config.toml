@@ -16,13 +16,21 @@ name = "Derbyshire"
 # radius and crosses the border without noticing.
 lat = 53.0525
 lng = -1.7783
-# Kilometres. eBird caps this at 50. Thirty reaches the White Peak,
-# Carsington Water and the Derwent valley.
-radius_km = 30
+# Kilometres. eBird caps this at 50. Sixteen is ten miles, which keeps
+# the board to birds you could plausibly go and see this afternoon.
+radius_km = 16
 # Days of history for the recent-nearby query. eBird caps this at 30.
 back_days = 5
 # Days of history for the notable/rare query.
 notable_back_days = 7
+# Ask for rare birds by the radius above rather than by county. The two
+# queries answer different questions -- "seen nearby" is a circle, a
+# county is not -- and Derbyshire is about ninety kilometres top to
+# bottom, so the county form can headline the board with a bird seen an
+# hour's drive away. The cost of true: a rare bird is rare, and a ten
+# mile circle will often hold none, so the board falls back to the
+# rotation more often than it used to.
+notable_within_radius = true
 # Where the display hangs, for the date and times printed on it. The
 # renderer runs on a GitHub runner set to UTC, and eBird reports British
 # local time; without this the board would print one against the other.
