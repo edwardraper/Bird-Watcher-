@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+.pytest_cache/
+.coverage
+
+# Render output and tuning artefacts -- regenerate them, do not commit.
+preview.png
+palette_card.png
+dither_lab*.png
+
+# Never commit the API key.
+.env
+birddisplay.env

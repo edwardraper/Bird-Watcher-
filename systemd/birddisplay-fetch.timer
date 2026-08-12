@@ -1,0 +1,20 @@
+[Unit]
+Description=Refresh the bird board cache three times a day
+
+[Timer]
+# Ten minutes ahead of each render, so show.service always reads a cache
+# that was written this cycle.
+OnCalendar=*-*-* 06:50:00
+OnCalendar=*-*-* 12:50:00
+OnCalendar=*-*-* 18:50:00
+# After a power cut, get data before the panel is asked to draw anything.
+OnBootSec=2min
+# Fire a missed run on the next boot rather than waiting for tomorrow.
+Persistent=true
+# Nothing here is time-critical, and three Pis all hitting eBird on the
+# same second is exactly the behaviour they ask people to avoid.
+RandomizedDelaySec=90
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

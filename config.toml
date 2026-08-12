@@ -1,0 +1,96 @@
+# Regional bird e-ink display configuration.
+#
+# The eBird API key is NOT stored here. It is read from the environment
+# variable named in [ebird].api_key_env (default EBIRD_API_KEY).
+
+[region]
+# Confirm your county code before trusting it:
+#   curl -H "X-eBirdApiToken: $EBIRD_API_KEY" \
+#     https://api.ebird.org/v2/ref/region/list/subnational2/GB-ENG
+code = "GB-ENG-DEV"
+name = "Devon"
+# Centre point for the "recent nearby" query.
+lat = 50.7236
+lng = -3.5275
+# Kilometres. eBird caps this at 50.
+radius_km = 30
+# Days of history for the recent-nearby query. eBird caps this at 30.
+back_days = 5
+# Days of history for the notable/rare query.
+notable_back_days = 7
+
+[ebird]
+base_url = "https://api.ebird.org/v2"
+# en_UK gives British common names (Dunnock, not Hedge Accentor).
+locale = "en_UK"
+api_key_env = "EBIRD_API_KEY"
+# Refetch the ~17k row taxonomy at most this often.
+taxonomy_max_age_days = 30
+
+[http]
+# Wikimedia's user-agent policy requires a descriptive string with contact
+# info. Put a real address here before running against Wikimedia.
+# https://meta.wikimedia.org/wiki/User-Agent_policy
+user_agent = "birddisplay/0.1 (https://github.com/edwardraper/Bird-Watcher-; edwardraper@outlook.com)"
+timeout_seconds = 10.0
+retries = 3
+backoff_seconds = 1.0
+
+[cache]
+dir = "~/.cache/birddisplay"
+# The renderer draws a "data stale" marker rather than presenting old
+# sightings as current.
+max_age_hours = 48
+
+[board]
+# How many species in the "also seen nearby" column.
+also_seen_count = 8
+# Don't feature the same species again until this many cycles have passed.
+feature_memory = 6
+# Prefer a notable sighting as the headline if one exists.
+prefer_notable = true
+
+[image]
+# Photo enhancement before dithering. Six colours need the help.
+# Tune these against the physical panel, not your monitor:
+#   python -m scripts.dither_lab <photo.jpg>
+saturation = 1.30
+contrast = 1.18
+sharpness = 1.45
+# Longest edge to request from Wikimedia. Large enough to crop from.
+request_width = 1200
+
+[display]
+width = 800
+height = 480
+# "epaper" or "preview". --preview on the command line overrides this.
+backend = "preview"
+preview_path = "preview.png"
+# Rotate the composed board by this many degrees before sending it to the
+# panel: 0 or 180, depending on which way up the frame hangs.
+rotate = 0
+
+# How the six inks LOOK. Used only to render preview PNGs -- the panel
+# itself is sent ink indices, so changing these cannot change what it
+# prints. Starting points only: run scripts/palette_card.py, photograph
+# the panel, and tune these until the preview matches the wall.
+[palette]
+black = [0, 0, 0]
+white = [255, 255, 255]
+yellow = [238, 202, 44]
+red = [172, 42, 40]
+blue = [42, 66, 138]
+green = [42, 106, 74]
+
+# What pixels are COMPARED AGAINST when choosing an ink. Saturated on
+# purpose, and rarely worth changing: matching against the muted values
+# above drags every neutral mid-tone onto a coloured ink and photographs
+# come out as red and blue confetti. Delete this section to use the
+# built-in defaults.
+[palette.match]
+black = [0, 0, 0]
+white = [255, 255, 255]
+yellow = [255, 255, 0]
+red = [255, 0, 0]
+blue = [0, 0, 255]
+green = [0, 255, 0]

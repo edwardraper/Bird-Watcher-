@@ -1,0 +1,33 @@
+[Unit]
+Description=Draw the cached bird board on the e-paper panel
+Documentation=https://github.com/edwardraper/Bird-Watcher-
+# Deliberately no network dependency: this reads the cache and nothing
+# else, so it works fine with the wifi down.
+
+[Service]
+Type=oneshot
+# Change pi to your username throughout if it is not pi.
+User=pi
+WorkingDirectory=/home/pi/birddisplay
+ExecStart=/home/pi/.venvs/birddisplay/bin/python -m birddisplay.show
+# SPI and GPIO access for the HAT.
+SupplementaryGroups=spi gpio
+# A full Spectra 6 refresh takes about 30 seconds; allow for a slow one,
+# but never leave a half-refreshed panel powered indefinitely.
+TimeoutStartSec=180
+# Do not retry: a second refresh means another 30 seconds of the panel
+# being driven, and the previous image is still perfectly readable.
+Restart=no
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ReadWritePaths=/home/pi/.cache/birddisplay
+ProtectKernelTunables=true
+ProtectControlGroups=true
+# No outbound network at all: the renderer must never depend on it.
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

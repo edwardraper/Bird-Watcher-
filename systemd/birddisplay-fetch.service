@@ -1,0 +1,35 @@
+[Unit]
+Description=Refresh the bird board cache from eBird
+Documentation=https://github.com/edwardraper/Bird-Watcher-
+# Do not start hammering the API before DNS and the clock are up.
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Change pi to your username throughout if it is not pi.
+User=pi
+WorkingDirectory=/home/pi/birddisplay
+# Holds EBIRD_API_KEY=... -- chmod 600, owned by the service user, and
+# kept out of the repo.
+EnvironmentFile=/etc/birddisplay.env
+ExecStart=/home/pi/.venvs/birddisplay/bin/python -m birddisplay.fetch
+# The network is the flaky part, and the panel is untouched either way,
+# so a retry costs nothing.
+Restart=on-failure
+RestartSec=120
+# Bounded so a hung DNS lookup cannot overlap the next scheduled run.
+TimeoutStartSec=300
+
+# This talks to the internet and writes one cache directory. Nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/.cache/birddisplay
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

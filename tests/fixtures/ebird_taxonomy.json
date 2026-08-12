@@ -1,0 +1,167 @@
+[
+  {
+    "sciName": "Erithacus rubecula",
+    "comName": "European Robin",
+    "speciesCode": "eurrob1",
+    "category": "species",
+    "taxonOrder": 27897,
+    "order": "Passeriformes",
+    "familyCode": "muscic2",
+    "familyComName": "Old World Flycatchers",
+    "familySciName": "Muscicapidae"
+  },
+  {
+    "sciName": "Upupa epops",
+    "comName": "Eurasian Hoopoe",
+    "speciesCode": "hoopoe",
+    "category": "species",
+    "taxonOrder": 8461,
+    "order": "Bucerotiformes",
+    "familyCode": "upupid1",
+    "familyComName": "Hoopoes",
+    "familySciName": "Upupidae"
+  },
+  {
+    "sciName": "Calidris fuscicollis",
+    "comName": "White-rumped Sandpiper",
+    "speciesCode": "whrsan",
+    "category": "species",
+    "taxonOrder": 5108,
+    "order": "Charadriiformes",
+    "familyCode": "scolop1",
+    "familyComName": "Sandpipers and Allies",
+    "familySciName": "Scolopacidae"
+  },
+  {
+    "sciName": "Numenius arquata",
+    "comName": "Eurasian Curlew",
+    "speciesCode": "eurcur",
+    "category": "species",
+    "taxonOrder": 4996,
+    "order": "Charadriiformes",
+    "familyCode": "scolop1",
+    "familyComName": "Sandpipers and Allies",
+    "familySciName": "Scolopacidae"
+  },
+  {
+    "sciName": "Cettia cetti",
+    "comName": "Cetti's Warbler",
+    "speciesCode": "cetwar1",
+    "category": "species",
+    "taxonOrder": 25291,
+    "order": "Passeriformes",
+    "familyCode": "cettii1",
+    "familyComName": "Bush Warblers and Allies",
+    "familySciName": "Cettiidae"
+  },
+  {
+    "sciName": "Picus viridis",
+    "comName": "European Green Woodpecker",
+    "speciesCode": "grnwoo",
+    "category": "species",
+    "taxonOrder": 9284,
+    "order": "Piciformes",
+    "familyCode": "picid1",
+    "familyComName": "Woodpeckers",
+    "familySciName": "Picidae"
+  },
+  {
+    "sciName": "Apus apus",
+    "comName": "Common Swift",
+    "speciesCode": "comswi",
+    "category": "species",
+    "taxonOrder": 1043,
+    "order": "Apodiformes",
+    "familyCode": "apodid1",
+    "familyComName": "Swifts",
+    "familySciName": "Apodidae"
+  },
+  {
+    "sciName": "Ardea cinerea",
+    "comName": "Grey Heron",
+    "speciesCode": "grycro",
+    "category": "species",
+    "taxonOrder": 1660,
+    "order": "Pelecaniformes",
+    "familyCode": "ardeid1",
+    "familyComName": "Herons, Egrets, and Bitterns",
+    "familySciName": "Ardeidae"
+  },
+  {
+    "sciName": "Emberiza citrinella",
+    "comName": "Yellowhammer",
+    "speciesCode": "yellow2",
+    "category": "species",
+    "taxonOrder": 31384,
+    "order": "Passeriformes",
+    "familyCode": "ember1",
+    "familyComName": "Old World Buntings",
+    "familySciName": "Emberizidae"
+  },
+  {
+    "sciName": "Prunella modularis",
+    "comName": "Dunnock",
+    "speciesCode": "dunnoc1",
+    "category": "species",
+    "taxonOrder": 29455,
+    "order": "Passeriformes",
+    "familyCode": "prunel1",
+    "familyComName": "Accentors",
+    "familySciName": "Prunellidae"
+  },
+  {
+    "sciName": "Emberiza schoeniclus",
+    "comName": "Common Reed Bunting",
+    "speciesCode": "reebun",
+    "category": "species",
+    "taxonOrder": 31421,
+    "order": "Passeriformes",
+    "familyCode": "ember1",
+    "familyComName": "Old World Buntings",
+    "familySciName": "Emberizidae"
+  },
+  {
+    "sciName": "Alauda arvensis",
+    "comName": "Eurasian Skylark",
+    "speciesCode": "skylar",
+    "category": "species",
+    "taxonOrder": 23177,
+    "order": "Passeriformes",
+    "familyCode": "alaudi1",
+    "familyComName": "Larks",
+    "familySciName": "Alaudidae"
+  },
+  {
+    "sciName": "Oenanthe oenanthe",
+    "comName": "Northern Wheatear",
+    "speciesCode": "nothing",
+    "category": "species",
+    "taxonOrder": 28311,
+    "order": "Passeriformes",
+    "familyCode": "muscic2",
+    "familyComName": "Old World Flycatchers",
+    "familySciName": "Muscicapidae"
+  },
+  {
+    "sciName": "Larus argentatus/michahellis",
+    "comName": "European Herring Gull/Yellow-legged Gull",
+    "speciesCode": "y00423",
+    "category": "slash",
+    "taxonOrder": 6110,
+    "order": "Charadriiformes",
+    "familyCode": "larida1",
+    "familyComName": "Gulls, Terns, and Skimmers",
+    "familySciName": "Laridae"
+  },
+  {
+    "sciName": "Erithacus rubecula melophilus",
+    "comName": "European Robin (British)",
+    "speciesCode": "eurrob2",
+    "category": "issf",
+    "taxonOrder": 27899,
+    "order": "Passeriformes",
+    "familyCode": "muscic2",
+    "familyComName": "Old World Flycatchers",
+    "familySciName": "Muscicapidae"
+  }
+]

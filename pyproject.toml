@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "birddisplay"
+version = "0.1.0"
+description = "Regional bird sightings on a Waveshare 7.3in Spectra 6 e-paper panel"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    # Pillow and numpy come from apt on the Pi (python3-pil, python3-numpy)
+    # because the prebuilt ARM wheels save a very long compile. The venv is
+    # created with --system-site-packages so it can see them.
+    "requests>=2.31",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+birddisplay-fetch = "birddisplay.fetch:main"
+birddisplay-show = "birddisplay.show:main"
+
+[tool.setuptools.packages.find]
+include = ["birddisplay*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:birddisplay.*"]

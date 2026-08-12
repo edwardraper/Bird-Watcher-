@@ -1,0 +1,18 @@
+[Unit]
+Description=Refresh the e-paper panel three times a day
+
+[Timer]
+# Ten minutes after each fetch. A Spectra 6 full refresh is ~30s and
+# there is no partial update, so this is as often as is worth doing --
+# and it satisfies Waveshare's advice to refresh at least daily, which
+# keeps ghosting from setting in.
+OnCalendar=*-*-* 07:00:00
+OnCalendar=*-*-* 13:00:00
+OnCalendar=*-*-* 19:00:00
+# After a power cut, redraw once the fetcher has had a chance to run.
+OnBootSec=4min
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

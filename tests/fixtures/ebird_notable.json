@@ -1,0 +1,33 @@
+[
+  {
+    "speciesCode": "hoopoe",
+    "comName": "Eurasian Hoopoe",
+    "sciName": "Upupa epops",
+    "locId": "L1112223",
+    "locName": "Prawle Point, South Hams",
+    "obsDt": "2026-08-11 08:40",
+    "howMany": 1,
+    "lat": 50.2081,
+    "lng": -3.7192,
+    "obsValid": true,
+    "obsReviewed": true,
+    "locationPrivate": false,
+    "subId": "S123456789",
+    "userDisplayName": "A Birder"
+  },
+  {
+    "speciesCode": "whrsan",
+    "comName": "White-rumped Sandpiper",
+    "sciName": "Calidris fuscicollis",
+    "locId": "L2223334",
+    "locName": "Exe Estuary, Bowling Green Marsh RSPB",
+    "obsDt": "2026-08-09 15:20",
+    "howMany": 1,
+    "lat": 50.6721,
+    "lng": -3.4489,
+    "obsValid": true,
+    "obsReviewed": false,
+    "locationPrivate": false,
+    "subId": "S123456790"
+  }
+]
