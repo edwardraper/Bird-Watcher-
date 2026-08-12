@@ -84,7 +84,10 @@ def sample_board(store: PlateStore, code: str, region_name: str) -> Board:
         headline=headline,
         headline_photo=Photo(
             path="",
-            credit=plate.artist,
+            # plate.credit, not plate.artist: the artist column is a
+            # constant the builder stamps on every row, and the preview
+            # must show the same credit the panel will print.
+            credit=plate.credit,
             licence=plate.licence,
             source_url=plate.source_url,
         ),

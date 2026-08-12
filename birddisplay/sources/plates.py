@@ -23,6 +23,31 @@ from ..model import Photo, Species
 
 log = logging.getLogger(__name__)
 
+# Long Victorian titles, trimmed to what fits the credit line on a 480px
+# board without ellipsising. The stored work string keeps its full title;
+# only the printed form is shortened, and only by dropping a subtitle --
+# never the name that identifies who the plate belongs to.
+_WORK_SHORTENINGS: tuple[tuple[str, str], ...] = (
+    ("Coloured Figures of the Birds of the British Islands", "Coloured Figures"),
+    ("A History of the Birds of Europe", "Birds of Europe"),
+    ("Onze vogels in huis en tuin", "Onze vogels"),
+)
+
+# A work the builder could not identify falls back to the Commons file
+# name, which is a filename and not a citation. Better to credit Commons
+# plainly than to print "Anser albifrons 1921.jpg" on the wall.
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".tif", ".tiff")
+
+
+def _shorten_work(work: str) -> str:
+    """The work as it should read on the panel, or "" if it is unusable."""
+    work = (work or "").strip()
+    if not work or work.lower().endswith(_IMAGE_SUFFIXES):
+        return ""
+    for long_form, short_form in _WORK_SHORTENINGS:
+        work = work.replace(long_form, short_form)
+    return work
+
 SCHEMA_VERSION = 1
 
 _COLUMNS = (
@@ -54,7 +79,36 @@ class Plate:
 
     @property
     def credit_line(self) -> str:
-        return " / ".join(bit for bit in (self.artist, self.licence) if bit)
+        return " / ".join(bit for bit in (self.credit, self.licence) if bit)
+
+    @property
+    def credit(self) -> str:
+        """Who to name on the panel: the work, not the `artist` column.
+
+        The column is not trustworthy. The builder writes the constant
+        "J. G. Keulemans" into every row it creates, and the Commons
+        `Artist` field it checks against lists every illustrator of the
+        whole book -- so a Lilford plate drawn by Thorburn passes the
+        gate on the book and is then stamped with Keulemans' name. At
+        least fifteen of the plates from ranks 101-150 are Thorburn's,
+        and the panel was printing Keulemans underneath them. Telling
+        them apart needs the signature read off the scan, which is not
+        something the builder can do.
+
+        The work is verifiable from the source file and is honest either
+        way, because the title says who drew it exactly when that is
+        known: "Keulemans, Onze vogels in huis en tuin (1869)" is his own
+        book, while "Lilford, Coloured Figures of the Birds of the
+        British Islands" is the several-illustrators case and claims
+        nothing it cannot support.
+
+        These plates are public domain, so nothing here is a licence
+        obligation -- which is the reason a short form is allowed to
+        drop a subtitle, and the reason a wrong name was never a legal
+        problem, only a false statement hanging on a wall.
+        """
+        work = _shorten_work(self.work)
+        return work or "Wikimedia Commons"
 
     def write_image(self, directory: Path) -> Path:
         """Drop the image on disk so anything taking a path can read it.
@@ -72,7 +126,7 @@ class Plate:
         """The Photo record the board already knows how to render."""
         return Photo(
             path=str(self.write_image(directory)),
-            credit=self.artist,
+            credit=self.credit,
             licence=self.licence,
             source_url=self.source_url,
         )

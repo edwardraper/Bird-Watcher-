@@ -154,6 +154,29 @@ What survives that and is still wrong goes in `data/plate_exclusions.json`,
 with the reason, and `--update --only <species>` rebuilds one bird without
 disturbing the other 44.
 
+**What is still missing.** Not every bird has a plate: some were searched for
+and nothing usable came back, some were found and refused, and the ranks
+below the last batch have not been looked at yet. Those three are different
+problems, so `data/missing_plates.json` keeps them in three lists, with the
+refusal reasons carried across from the exclusions file. It is generated,
+not written — regenerate it after every build, and `--check` fails if it has
+drifted:
+
+```bash
+python -m scripts.missing_plates
+python -m scripts.missing_plates --check
+```
+
+Rank is how often the bird is actually reported, so the gaps are not worth
+the same: a missing plate at rank 6 sends the board to a photograph far more
+often than one at rank 140, which is why the file lists the common ones on
+their own at the top.
+
+```bash
+python -m scripts.plate_contact_sheet --from-rank 101 --to-rank 150 \
+    --out sheet.png       # every plate in a batch, big enough to judge
+```
+
 ## Rendering to six colours
 
 The panel has six inks — black, white, yellow, red, blue, green — and nothing

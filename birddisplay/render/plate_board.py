@@ -408,14 +408,24 @@ class PlateBoardRenderer:
     # -- text --------------------------------------------------------------
 
     def _detail_line(self, sighting: Sighting) -> str:
-        bits: list[str] = []
-        if sighting.observed_at:
-            bits.append(sighting.observed_at.strftime("%H:%M"))
-        if sighting.count and sighting.count > 1:
-            bits.append(f"{sighting.count} birds")
-        if sighting.notable:
-            bits.append("notable")
-        return SEPARATOR.join(bits)
+        """What sits under the scientific name, which is now almost nothing.
+
+        The observation time and the head count have been taken out. Both
+        were true and neither was worth reading from across a room: the
+        board refreshes every two hours, so "07:14" is answering a
+        question nobody asked of a picture on a wall, and "3 birds"
+        counted one checklist rather than the morning.
+
+        "notable" stays. It is the only thing here that changes how you
+        look at the bird -- it means the county recorder thought this one
+        was worth remarking on -- and the board already prefers a notable
+        sighting for the headline.
+
+        An empty line is expected and handled: the callers ask before
+        they reserve height for it, so the name simply sits closer to the
+        rule.
+        """
+        return "notable" if sighting.notable else ""
 
     def _also_seen_names(self, board: Board) -> list[str]:
         seen: set[str] = set()

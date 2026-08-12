@@ -125,12 +125,46 @@ def test_writing_the_image_out_is_atomic(store: PlateStore, tmp_path: Path) -> N
 
 
 def test_as_photo_carries_the_credit(store: PlateStore, tmp_path: Path) -> None:
+    """The work is credited, not the `artist` column.
+
+    This plate is the case that gives the game away: it comes out of
+    Lilford, which had several illustrators, and the builder stamped
+    "J. G. Keulemans" on it anyway because the Commons Artist field
+    lists everyone who drew for the book. The panel printed that name.
+    """
     plate = store.get("eurrob1")
     assert plate is not None
+    assert plate.artist == "J. G. Keulemans", "the unreliable column, kept as-is"
+
     photo = plate.as_photo(tmp_path / "images")
-    assert photo.credit == "J. G. Keulemans"
-    assert photo.credit_line == "J. G. Keulemans / Public domain"
+    assert photo.credit == "Lilford, Coloured Figures"
+    assert photo.credit_line == "Lilford, Coloured Figures / Public domain"
     assert Path(photo.path).exists()
+
+
+def test_a_plate_from_keulemans_own_book_still_names_him() -> None:
+    """Crediting the work does not lose the artist where he is known --
+    his own book's title carries his name, which is exactly why the work
+    is honest in both directions."""
+    own_book = Plate(
+        species_code="eurbla",
+        common_name="Blackbird",
+        scientific_name="Turdus merula",
+        family="Thrushes",
+        artist="J. G. Keulemans",
+        attribution="attributed",
+        work="Keulemans, Onze vogels in huis en tuin (1869)",
+        year="1869",
+        licence="Public domain",
+        source_url="",
+        commons_file="",
+        image_format="webp",
+        width=1,
+        height=1,
+        image=b"",
+    )
+    assert own_book.credit == "Keulemans, Onze vogels (1869)"
+    assert own_book.credit_line == "Keulemans, Onze vogels (1869) / Public domain"
 
 
 def test_credit_line_survives_a_missing_licence() -> None:
@@ -151,4 +185,55 @@ def test_credit_line_survives_a_missing_licence() -> None:
         height=1,
         image=b"",
     )
-    assert bare.credit_line == "J. G. Keulemans"
+    # No work to name and no licence to state: credit Commons plainly
+    # rather than repeating a name the row cannot support.
+    assert bare.credit_line == "Wikimedia Commons"
+
+
+def test_an_unidentified_work_is_not_printed_as_a_filename() -> None:
+    """Where the builder could not match a work it stored the Commons
+    file name, which is a filename and not a citation. The panel must not
+    print "Anser albifrons 1921.jpg" at the foot of the board."""
+    from dataclasses import replace as _replace
+
+    bare = Plate(
+        species_code="x",
+        common_name="X",
+        scientific_name="X x",
+        family="",
+        artist="J. G. Keulemans",
+        attribution="attributed",
+        work="Anser albifrons 1921.jpg",
+        year="",
+        licence="Public domain",
+        source_url="",
+        commons_file="",
+        image_format="webp",
+        width=1,
+        height=1,
+        image=b"",
+    )
+    assert bare.credit_line == "Wikimedia Commons / Public domain"
+    assert ".jpg" not in _replace(bare, work="The Ibis").credit_line
+
+
+def test_nothing_credits_the_artist_column() -> None:
+    """The bug was in three places at once, so guard the shape of it.
+
+    `Plate.artist` is the constant the builder stamps on every row. It is
+    kept because it is what the database says, but nothing may print it:
+    the credit comes from the work. This caught `as_photo` and the
+    preview script after the first fix looked complete.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    offenders = []
+    for path in (*(root / "birddisplay").rglob("*.py"), *(root / "scripts").glob("*.py")):
+        if path.name == "build_plate_db.py":
+            continue  # writes the column; does not print it
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(r"\bcredit\w*\s*=\s*\w+\.artist\b", line):
+                offenders.append(f"{path.relative_to(root)}:{number}")
+    assert not offenders, f"these credit the artist column: {offenders}"
