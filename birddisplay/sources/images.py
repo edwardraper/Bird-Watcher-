@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 
 from ..cache import write_json_atomic
 from ..config import Config
@@ -32,6 +32,10 @@ log = logging.getLogger(__name__)
 WIKIPEDIA_SUMMARY = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+
+# Stands in when imageinfo yields no artist. It is not a real attribution --
+# scripts compare against it to tell "credited" from "credited to nobody".
+GENERIC_CREDIT = "Wikimedia Commons"
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
@@ -49,6 +53,19 @@ def _clean_html(raw: str | None) -> str:
     text = _TAG_RE.sub(" ", raw)
     text = html.unescape(text)
     return _WS_RE.sub(" ", text).strip()
+
+
+def _filename_from_url(source: str) -> str:
+    """Recover the Commons file name from an image URL.
+
+    Thumbnail URLs look like .../commons/a/ab/File.jpg/640px-File.jpg, so the
+    size prefix has to come off. The summary API also hangs tracking
+    parameters on the end (?utm_source=...&utm_campaign=api), and those are
+    not part of the name: leaving them attached makes every File: lookup miss,
+    which silently costs the photographer their credit.
+    """
+    path = urlsplit(source).path
+    return _THUMB_PREFIX_RE.sub("", unquote(path.rsplit("/", 1)[-1]))
 
 
 def _shorten(text: str, limit: int = 60) -> str:
@@ -140,10 +157,7 @@ class ImageSource:
             if not source:
                 log.info("Wikipedia article %r has no lead image", title)
                 continue
-            # Thumbnail URLs look like .../commons/a/ab/File.jpg/640px-File.jpg,
-            # so strip any size prefix to recover the real file name.
-            filename = _THUMB_PREFIX_RE.sub("", unquote(source.rsplit("/", 1)[-1]))
-            return _FileRef(filename=filename, url=source)
+            return _FileRef(filename=_filename_from_url(source), url=source)
         return None
 
     def _file_info(self, filename: str) -> tuple[str, str, str, str]:
@@ -228,7 +242,7 @@ class ImageSource:
         except (FetchError, OSError) as exc:
             raise ImageUnavailable(f"could not download {url}: {exc}") from exc
 
-        credit = _shorten(artist) if artist else "Wikimedia Commons"
+        credit = _shorten(artist) if artist else GENERIC_CREDIT
         photo = Photo(
             path=str(dest),
             credit=credit,

@@ -25,7 +25,11 @@ from birddisplay.config import Config, ConfigError, load_config  # noqa: E402
 from birddisplay.log import setup_logging  # noqa: E402
 from birddisplay.sources.ebird import EbirdClient  # noqa: E402
 from birddisplay.sources.http import FetchError, HttpClient  # noqa: E402
-from birddisplay.sources.images import ImageSource, ImageUnavailable  # noqa: E402
+from birddisplay.sources.images import (  # noqa: E402
+    GENERIC_CREDIT,
+    ImageSource,
+    ImageUnavailable,
+)
 from birddisplay.model import Species  # noqa: E402
 
 PASS, FAIL, WARN = "PASS", "FAIL", "WARN"
@@ -194,11 +198,13 @@ def check_images(config: Config, http: HttpClient, report: Report) -> None:
         "Wikimedia image and attribution",
         f"{size_kb:.0f} kB, credited to {photo.credit_line or '(no credit found)'}",
     )
-    if not photo.credit:
+    if not photo.credit or photo.credit == GENERIC_CREDIT:
         report.add(
             WARN,
             "photo credit",
-            "no artist returned. Most CC licences require attribution.",
+            f"no artist returned, only the generic {GENERIC_CREDIT!r} "
+            "fallback. Most CC licences require naming the author, so this "
+            "is worth chasing rather than shipping.",
         )
 
 

@@ -15,7 +15,13 @@ import requests
 
 from birddisplay.sources.ebird import EbirdClient
 from birddisplay.sources.http import FetchError, HttpClient
-from birddisplay.sources.images import ImageSource, ImageUnavailable, _clean_html
+from birddisplay.sources.images import (
+    GENERIC_CREDIT,
+    ImageSource,
+    ImageUnavailable,
+    _clean_html,
+    _filename_from_url,
+)
 from birddisplay.sources.taxonomy import Taxonomy, ensure_taxonomy, load_taxonomy
 
 
@@ -306,6 +312,67 @@ def test_the_scientific_name_is_tried_first(config):
     )
     ImageSource(config, http).photo_for(species())
     assert "Upupa_epops" in session.requests[0]["url"]
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        (
+            "https://upload.wikimedia.org/wikipedia/commons/1/12/Hoopoe.jpg",
+            "Hoopoe.jpg",
+        ),
+        # The summary API appends tracking parameters to the image URL.
+        (
+            "https://upload.wikimedia.org/wikipedia/commons/1/12/Hoopoe.jpg"
+            "?utm_source=en.wikipedia.org&utm_campaign=api",
+            "Hoopoe.jpg",
+        ),
+        # Thumbnails carry a size prefix on the last segment.
+        (
+            "https://upload.wikimedia.org/wikipedia/commons/1/12/Hoopoe.jpg"
+            "/640px-Hoopoe.jpg?utm_source=en.wikipedia.org",
+            "Hoopoe.jpg",
+        ),
+        # Percent-encoded names have to survive the round trip.
+        (
+            "https://upload.wikimedia.org/wikipedia/commons/1/12/"
+            "Upupa%20epops%2C%20Spain.jpg?utm_content=thumbnail_unscaled",
+            "Upupa epops, Spain.jpg",
+        ),
+    ],
+)
+def test_the_file_name_survives_tracking_parameters(url, expected):
+    assert _filename_from_url(url) == expected
+
+
+def test_a_tracked_image_url_still_credits_the_photographer(config):
+    """A live-only regression: fixtures never carried the utm parameters.
+
+    With them left on the file name the File: lookup misses, and the board
+    silently credits "Wikimedia Commons" instead of the person who holds
+    the copyright.
+    """
+    tracked = {
+        "type": "standard",
+        "titles": {"canonical": "Upupa_epops"},
+        "originalimage": {
+            "source": "https://upload.wikimedia.org/wikipedia/commons/1/12/"
+            "Hoopoe.jpg?utm_source=en.wikipedia.org&utm_campaign=api"
+        },
+    }
+    http, session = client_for(
+        config,
+        [
+            FakeResponse(200, payload=tracked),
+            FakeResponse(200, payload=IMAGEINFO),
+            FakeResponse(200, body=JPEG_BYTES),
+        ],
+    )
+    photo = ImageSource(config, http).photo_for(species())
+
+    assert session.requests[1]["params"]["titles"] == "File:Hoopoe.jpg"
+    assert photo.credit == "Jane Doe"
+    assert photo.credit != GENERIC_CREDIT
 
 
 def test_a_cached_photo_is_not_downloaded_again(config):
