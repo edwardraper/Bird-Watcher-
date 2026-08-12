@@ -54,6 +54,15 @@ _MIN_ABSOLUTE_AREA = 0.0008
 _CROP_MARGIN = 0.03
 
 
+# Above this share of its own bounding box, what came back is a rectangle
+# rather than a bird: either a plate whose background Keulemans painted in
+# (his "Onze vogels" birds mostly sit in a landscape), or a cutout that
+# failed. Calibrated against real plates: a bird on bare paper lands
+# between 0.45 and 0.65, a painted scene between 0.73 and 1.0.
+SCENE_COVERAGE = 0.70
+FAILED_COVERAGE = 0.97
+
+
 @dataclass(frozen=True)
 class CutoutResult:
     """A finished cutout plus the numbers needed to judge it."""
@@ -71,9 +80,24 @@ class CutoutResult:
     """True if the border pass failed and we seeded from inside a frame."""
 
     @property
+    def is_scene(self) -> bool:
+        """The plate has its own background, so there is none to remove.
+
+        Not a failure -- these are fine drawings -- but on a board built
+        out of white space they arrive as a dithered rectangle, so a plate
+        that cuts to bare paper is always worth more.
+        """
+        return self.coverage > SCENE_COVERAGE
+
+    @property
+    def failed(self) -> bool:
+        """Nothing was removed at all: a ruled frame, or a photograph."""
+        return self.kept_blobs == 0 or self.coverage > FAILED_COVERAGE
+
+    @property
     def suspect(self) -> bool:
         """Worth a human eye before it goes in the database."""
-        return self.coverage > 0.72 or self.kept_blobs == 0
+        return self.failed or self.is_scene
 
 
 def _paper_colour(pixels: np.ndarray) -> np.ndarray:

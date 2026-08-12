@@ -1,0 +1,11 @@
+{
+ "description": "Files and works the builder must never choose, with the reason. Everything here passed both gates -- right artist, right bird -- and is still wrong for this display, which is a judgement no scoring rule was going to make. `excluded` names single files; `excluded_works` names a work that is wrong for one species, which is what a series of plates needs.",
+ "excluded": [],
+ "excluded_works": [
+  {
+   "species": "Black-headed Gull",
+   "work": "Ornithological miscellany",
+   "reason": "Keulemans drew the black-headed gull for this journal three times and every one is the same gullery seen across a lake: a hundred birds forty pixels wide. Correctly identified and genuinely his, and unreadable as a portrait on a 480px panel. No plate is better than a grey landscape."
+  }
+ ]
+}

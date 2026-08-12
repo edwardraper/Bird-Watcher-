@@ -64,6 +64,7 @@ log = logging.getLogger("build_plate_db")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SPECIES = REPO_ROOT / "data" / "uk_birds_top200.json"
+DEFAULT_EXCLUSIONS = REPO_ROOT / "data" / "plate_exclusions.json"
 DEFAULT_OUT = REPO_ROOT / "assets" / "plates" / "keulemans_uk.sqlite"
 DEFAULT_WORK_DIR = Path("~/.cache/birddisplay/plate-build").expanduser()
 
@@ -94,8 +95,28 @@ WORKS: tuple[tuple[str, str, int], ...] = (
 
 # Whole volumes, title pages and bindings are scanned and uploaded next to
 # the plates, and they carry the book's full metadata, so they look like
-# excellent matches until you see them.
-NOT_A_PLATE = ("vol.", "vol ", "volume", "title page", "frontispiece", "cover", "binding")
+# excellent matches until you see them. So do the anatomical figures --
+# "Gallinula's bills" is a genuine Keulemans drawing of a genuine moorhen,
+# and it is eight beaks in a row.
+NOT_A_PLATE = (
+    "vol.",
+    "vol ",
+    "volume",
+    "title page",
+    "frontispiece",
+    "cover",
+    "binding",
+    "bills",
+    "beaks",
+    "heads of",
+    "feet of",
+    "eggs",
+    "egg of",
+    "skull",
+    "sternum",
+    "anatomy",
+    "map",
+)
 
 # Other artists who worked on the same volumes. If one of them signed the
 # plate, it is not ours.
@@ -139,6 +160,17 @@ def _has_fuzzy_word(text: str, target: str, cutoff: float = 0.78) -> bool:
         for word in _WORD_RE.findall(lowered)
         if abs(len(word) - len(target)) <= 3
     )
+
+
+def _has_phrase(text: str, phrase: str) -> bool:
+    """Is this phrase in the text, ignoring punctuation and case?
+
+    Plate captions are typeset "CARRION CROW." or "Carrion-Crow", and the
+    OCR adds its own spacing, so a literal search finds none of them.
+    """
+    flat = " ".join(_WORD_RE.findall(text.lower()))
+    wanted = " ".join(_WORD_RE.findall(phrase.lower()))
+    return bool(wanted) and wanted in flat
 
 
 def _binomials(text: str) -> list[tuple[str, str]]:
@@ -417,8 +449,42 @@ def resolve_species(
 # -------------------------------------------------------------- scoring
 
 
+@dataclass(frozen=True)
+class Exclusions:
+    """What a human has looked at and refused. data/plate_exclusions.json."""
+
+    files: frozenset[str] = frozenset()
+    works: tuple[tuple[str, str], ...] = ()
+    """(species common name, work) pairs -- a series of plates that is wrong
+    for one bird but fine for others."""
+
+    def refuses(self, entry: SpeciesEntry, candidate: Candidate) -> bool:
+        if candidate.filename in self.files:
+            return True
+        haystack = candidate.haystack.lower()
+        return any(
+            species == entry.common_name and work.lower() in haystack
+            for species, work in self.works
+        )
+
+
+def load_exclusions(path: Path) -> Exclusions:
+    if not path.exists():
+        return Exclusions()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return Exclusions(
+        files=frozenset(row["file"] for row in data.get("excluded", [])),
+        works=tuple(
+            (row["species"], row["work"]) for row in data.get("excluded_works", [])
+        ),
+    )
+
+
 def score_candidate(
-    entry: SpeciesEntry, candidate: Candidate, from_species_category: bool = False
+    entry: SpeciesEntry,
+    candidate: Candidate,
+    from_species_category: bool = False,
+    excluded: Exclusions = Exclusions(),
 ) -> Candidate:
     """Decide whether this file is a Keulemans plate of this bird.
 
@@ -441,6 +507,11 @@ def score_candidate(
     if min(candidate.width, candidate.height) < MIN_EDGE:
         candidate.score = -100
         candidate.evidence = [f"too small ({candidate.width}x{candidate.height})"]
+        return candidate
+
+    if excluded.refuses(entry, candidate):
+        candidate.score = -100
+        candidate.evidence = ["excluded by hand; see data/plate_exclusions.json"]
         return candidate
 
     lowered_title = candidate.title.lower()
@@ -517,7 +588,14 @@ def score_candidate(
         species_score -= 40
         evidence.append(f"filename names {claimed[0].title()} {claimed[1]}")
 
-    if _has_fuzzy_word(candidate.haystack, entry.common_name.split()[-1].lower()):
+    words = entry.common_name.lower().split()
+    if len(words) > 1 and _has_phrase(candidate.caption, entry.common_name):
+        # "GREY HERON" printed under a plate identifies the bird about as
+        # well as a binomial does. One word does not: a Nilgiri blackbird
+        # is also captioned "blackbird".
+        species_score += 22
+        evidence.append("caption prints the English name")
+    elif _has_fuzzy_word(candidate.haystack, words[-1]):
         species_score += 8
         evidence.append("caption names the common name")
 
@@ -590,6 +668,12 @@ def candidate_titles(
     for name in entry.names[:2]:
         add(commons.search(f'"{name}" Keulemans'))
         add(commons.search(f'"{name}" Lilford Coloured figures'))
+    # The English name, which is how a plate caption says it and often the
+    # only part of a BHL scan that survived OCR intact. Worth a query of
+    # its own: the buzzard, the coot and the grey heron are all in Lilford
+    # and none of them can be found by their scientific name.
+    add(commons.search(f'"{entry.common_name}" Keulemans'))
+    add(commons.search(f'"{entry.common_name}" Lilford Coloured figures'))
     return titles, from_category
 
 
@@ -616,7 +700,8 @@ def build_species(
     longest_edge: int,
     quality: int,
     request_width: int,
-    max_attempts: int = 3,
+    excluded: Exclusions = Exclusions(),
+    max_attempts: int = 5,
 ) -> tuple[PlateRecord | None, dict[str, Any]]:
     """Find, cut out and encode one species' plate."""
     report: dict[str, Any] = {
@@ -638,7 +723,10 @@ def build_species(
 
     info = commons.file_info(titles, request_width)
     scored = sorted(
-        (score_candidate(entry, c, c.title in from_category) for c in info.values()),
+        (
+            score_candidate(entry, c, c.title in from_category, excluded)
+            for c in info.values()
+        ),
         key=lambda c: c.score,
         reverse=True,
     )
@@ -651,15 +739,18 @@ def build_species(
         ]
         return None, report
 
-    # Only the serious contenders get downloaded. A plate that cuts out
-    # cleanly is worth a lot -- it is the whole point of the exercise --
-    # but not enough to justify dropping to a candidate we are much less
-    # sure of, so alternatives have to stay within reach of the best score.
-    floor = max(20.0, usable[0].score * 0.5)
+    # Only the serious contenders get downloaded, and they are ranked
+    # lexicographically: a plate that cuts to bare paper beats a painted
+    # scene outright, whatever the scene scored, because a scene arrives on
+    # the board as a dithered rectangle. Score only settles it between two
+    # plates of the same kind. The floor keeps identity in charge -- we
+    # will not drop to a candidate we are much less sure of just because
+    # its background comes away.
+    floor = max(20.0, usable[0].score * 0.4)
     shortlist = [c for c in usable[:max_attempts] if c.score >= floor]
 
     attempts: list[dict[str, Any]] = []
-    best: tuple[float, Candidate, Any] | None = None
+    best: tuple[tuple[int, int, int], Candidate, Any] | None = None
 
     for candidate in shortlist:
         attempt: dict[str, Any] = {
@@ -680,16 +771,20 @@ def build_species(
             attempts.append(attempt)
             continue
 
-        # A cutout that fills its own bounding box means nothing was
-        # removed: a full painted scene, or a plate inside a ruled frame.
-        adjusted = candidate.score - (35 if result.suspect else 0)
+        rank = (0 if result.failed else 1, 0 if result.is_scene else 1, candidate.score)
         attempt["coverage"] = round(result.coverage, 3)
         attempt["dropped_blobs"] = result.dropped_blobs
-        attempt["outcome"] = "nothing to remove" if result.suspect else "cut cleanly"
+        attempt["outcome"] = (
+            "cutout failed"
+            if result.failed
+            else "painted scene, nothing to remove"
+            if result.is_scene
+            else "cut to bare paper"
+        )
         attempts.append(attempt)
 
-        if best is None or adjusted > best[0]:
-            best = (adjusted, candidate, result)
+        if best is None or rank > best[0]:
+            best = (rank, candidate, result)
         if not result.suspect:
             # Candidates are in descending score order, so nothing further
             # down the list can beat a clean cut at this position.
@@ -704,7 +799,7 @@ def build_species(
     blob, width, height = encode(result.image, longest_edge, quality)
     report["outcome"] = "ok"
     report["chosen"] = candidate.filename
-    report["suspect"] = result.suspect
+    report["scene"] = result.is_scene
     report["bytes"] = len(blob)
 
     signed = any("signed" in e for e in candidate.evidence)
@@ -824,6 +919,50 @@ def write_db(path: Path, records: Sequence[PlateRecord]) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def read_existing(path: Path) -> list[PlateRecord]:
+    """Rows already in the database, so --only can rebuild one species.
+
+    Without this, fixing the moorhen would throw away the other 45.
+    """
+    if not path.exists():
+        return []
+    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = connection.execute(
+            "SELECT species_code, rank, common_name, scientific_name, family,"
+            " artist, attribution, work, year, licence, source_url, commons_file,"
+            " image_format, width, height, image FROM plates"
+        ).fetchall()
+    except sqlite3.Error as exc:
+        log.warning("could not read the existing database: %s", exc)
+        return []
+    finally:
+        connection.close()
+    return [
+        PlateRecord(
+            species_code=row["species_code"],
+            rank=int(row["rank"]),
+            common_name=row["common_name"],
+            scientific_name=row["scientific_name"],
+            family=row["family"],
+            artist=row["artist"],
+            attribution=row["attribution"],
+            work=row["work"],
+            year=row["year"],
+            licence=row["licence"],
+            source_url=row["source_url"],
+            commons_file=row["commons_file"],
+            image=row["image"],
+            image_format=row["image_format"],
+            width=int(row["width"]),
+            height=int(row["height"]),
+            coverage=0.0,
+        )
+        for row in rows
+    ]
+
+
 def load_species(path: Path) -> list[SpeciesEntry]:
     data = json.loads(path.read_text(encoding="utf-8"))
     rows = data["species"] if isinstance(data, dict) else data
@@ -846,12 +985,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--species", type=Path, default=DEFAULT_SPECIES)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--work-dir", type=Path, default=DEFAULT_WORK_DIR)
+    parser.add_argument("--exclusions", type=Path, default=DEFAULT_EXCLUSIONS)
     parser.add_argument("--report", type=Path, help="write a per-species JSON report")
     parser.add_argument("--limit", type=int, help="only the first N species")
     parser.add_argument("--only", action="append", help="one species (any name); repeatable")
     parser.add_argument("--longest-edge", type=int, default=900)
     parser.add_argument("--quality", type=int, default=82)
     parser.add_argument("--config", help="path to config.toml (for the user agent)")
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="merge into the existing database instead of replacing it",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -881,6 +1026,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args.work_dir.mkdir(parents=True, exist_ok=True)
     taxonomy = load_taxonomy(args.work_dir)
+    excluded = load_exclusions(args.exclusions)
     commons = CommonsClient(user_agent, args.work_dir)
 
     records: list[PlateRecord] = []
@@ -896,6 +1042,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.longest_edge,
             args.quality,
             request_width,
+            excluded,
         )
         reports.append(report)
         if record is not None:
@@ -917,6 +1064,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 entry.common_name,
                 report.get("outcome"),
             )
+
+    if args.update:
+        # Every species this run looked at is re-decided by this run,
+        # including the ones that came back empty: a species whose plate
+        # has just been excluded must lose its row, not keep the old one.
+        attempted = {r["species_code"] for r in reports if "species_code" in r}
+        kept = [r for r in read_existing(args.out) if r.species_code not in attempted]
+        dropped = len(records) + len(kept) - len(read_existing(args.out))
+        records = sorted(records + kept, key=lambda r: r.rank)
+        log.info("kept %d existing rows, %+d net", len(kept), dropped)
 
     if records:
         write_db(args.out, records)

@@ -19,6 +19,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Building the Keulemans plate database (scripts/build_plate_db.py). Not
+# needed to run the display: the Pi only reads finished cutouts out of the
+# SQLite file, which needs nothing beyond the standard library and Pillow.
+plates = ["numpy>=1.24", "scipy>=1.10"]
 
 [project.scripts]
 birddisplay-fetch = "birddisplay.fetch:main"

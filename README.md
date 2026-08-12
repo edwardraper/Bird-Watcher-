@@ -81,12 +81,76 @@ intra-day). `locale=en_UK` gets British common names, so the board says
 "Dunnock" rather than "Hedge Accentor". eBird provides this free and asks
 people not to hammer it; the timers add a randomised delay for the same reason.
 
+**Keulemans plates** for the birds that have one, from a SQLite file built
+ahead of time — see below. Checked before Wikimedia, because it needs no
+network at all.
+
 **Wikimedia Commons** for photographs, via the Wikipedia article for each
 species' scientific name. Not Macaulay Library — the licensing there is
 per-asset and mostly not ours to use. Every image is cached to
 `~/.cache/birddisplay/images/{species_code}.jpg` alongside its artist and
 licence, and the credit line is always drawn on the board. That is a licence
 condition for most CC images, and it costs one line of 10px text.
+
+## The plate database
+
+`assets/plates/keulemans_uk.sqlite` holds Victorian bird lithographs with
+their paper cut away, one row per species, keyed by eBird species code. The
+Pi reads it directly:
+
+```sql
+SELECT common_name, image FROM plates WHERE species_code = 'eurrob1';
+```
+
+John Gerrard Keulemans (1842–1912) drew most of the plates in Lilford's
+*Coloured Figures of the Birds of the British Islands* and Dresser's *A
+History of the Birds of Europe*, which between them cover essentially every
+British bird. He died in 1912, so the lithographs are public domain
+worldwide, and Wikimedia Commons has scans of nearly all of them.
+
+They suit this panel far better than photographs do. Six inks and no
+partial refresh punish photographic mid-tones; a lithograph is already flat
+colour with a drawn outline, which is what the dithering wants. And a plate
+that has been cut out sits on the board's own white, so it reads as a print
+rather than a pasted-in rectangle — which is what `render/plate_board.py`
+is for.
+
+```bash
+pip install -e ".[plates]"          # numpy and scipy, build-time only
+python -m scripts.build_plate_db --limit 50 -v --report report.json
+python -m scripts.plate_board_preview --species eurbla --scale 2
+```
+
+Nothing on the Pi imports numpy or scipy or talks to Commons: the build
+happens on a laptop and the finished file is committed.
+
+**Cutting the paper away.** The background is not "everything near the
+paper colour" — that would eat the white in a gull's wing — but "everything
+near the paper colour that is connected to the border". Enclosed whites
+survive. The caption then falls out for free: once the paper is gone, the
+bird is one big blob and the letters of "ROBIN. *Erithacus rubecula*" are
+thirty small ones, so keeping only blobs within a fraction of the largest
+throws the text away without ever having to recognise it as text.
+
+**Choosing a plate.** Commons will hand you a Nilgiri blackbird for *Turdus
+merula*, a Persian robin for *Erithacus rubecula*, a Thorburn plate from a
+book Keulemans also worked on, and a PDF of the whole volume. So identity is
+a gate, not a preference: a candidate needs evidence that Keulemans drew it
+*and* evidence that it is this bird, or it is skipped. A wrong credit line
+is worse than no plate. Ranking only starts once both gates are passed, and
+there a plate that cuts to bare paper beats a full painted scene outright —
+Keulemans painted landscapes behind the birds in *Onze vogels in huis en
+tuin*, and a scene arrives on the board as a dithered rectangle.
+
+`--report` writes what was chosen and why, per species, which is the only
+practical way to audit a couple of hundred of these — but the report is not
+the check. Look at the pictures: the plate that scored 103 for the moorhen
+was a genuine Keulemans drawing of a genuine moorhen, correctly identified,
+and it was eight beaks in a row.
+
+What survives that and is still wrong goes in `data/plate_exclusions.json`,
+with the reason, and `--update --only <species>` rebuilds one bird without
+disturbing the other 44.
 
 ## Rendering to six colours
 
@@ -196,7 +260,7 @@ interesting ones:
 ## Development
 
 ```bash
-python -m pytest              # 124 tests, no network, no hardware
+python -m pytest              # 155 tests, no network, no hardware
 ```
 
 The eBird responses in `tests/fixtures/` are hand-built from the real API
@@ -208,8 +272,8 @@ birddisplay/
 ├── config.py            # load + validate config.toml, API key from env
 ├── model.py             # Sighting, Species, Photo, Board
 ├── cache.py             # atomic writes, staleness, featured-species memory
-├── sources/             # ebird, taxonomy, images, shared HTTP client
-├── render/              # palette, fonts, layout
+├── sources/             # ebird, taxonomy, images, plates, HTTP client
+├── render/              # palette, fonts, layout, plate_board
 ├── display/             # Display protocol, epaper, preview
 ├── vendor/              # Waveshare epd7in3e + epdconfig, unmodified
 ├── fetch.py             # entrypoint: refresh the cache
