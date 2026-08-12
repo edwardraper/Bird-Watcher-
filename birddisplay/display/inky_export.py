@@ -54,13 +54,29 @@ class InkyExportDisplay:
     def manifest_path(self) -> Path:
         return self.path.with_suffix(".json")
 
+    def _to_panel(self, image: Image.Image) -> Image.Image:
+        """Turn a composed board to match how the frame hangs.
+
+        expand=True so a 480x800 portrait board becomes the 800x480 the
+        panel expects; Image.ROTATE_* is a transpose, so no resampling and
+        no palette damage.
+        """
+        rotate = self.config.display.rotate
+        if rotate == 90:
+            return image.transpose(Image.Transpose.ROTATE_90)
+        if rotate == 180:
+            return image.transpose(Image.Transpose.ROTATE_180)
+        if rotate == 270:
+            return image.transpose(Image.Transpose.ROTATE_270)
+        return image
+
     def show(self, image: Image.Image) -> None:
-        if image.size != (self.width, self.height):
+        if image.size != self.config.display.board_size:
             raise ValueError(
-                f"board is {image.size}, frame expects {(self.width, self.height)}"
+                f"board is {image.size}, frame expects "
+                f"{self.config.display.board_size}"
             )
-        if self.config.display.rotate == 180:
-            image = image.rotate(180)
+        image = self._to_panel(image)
 
         exported = to_inky_png(image, self.config.palette)
         self.path.parent.mkdir(parents=True, exist_ok=True)

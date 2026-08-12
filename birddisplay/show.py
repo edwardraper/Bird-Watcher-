@@ -28,13 +28,13 @@ from .render.plate_board import PlateBoardRenderer
 log = logging.getLogger("birddisplay.show")
 
 
-def load_plate(board: Board) -> Image.Image | None:
-    """The headline image, but only if it is a cut-out plate.
+def load_headline_image(board: Board) -> Image.Image | None:
+    """Whatever illustrates the headline: a cut-out plate or a photograph.
 
     Which layout to draw is decided by what the image *is* rather than by
     anything recorded in the cache: a plate has had its paper removed and
     so carries an alpha channel, and a photograph is a solid rectangle.
-    That keeps the cache schema out of it, and means an old cache written
+    That keeps the cache schema out of it, and means a cache written
     before plates existed still renders correctly.
     """
     photo = board.headline_photo
@@ -42,13 +42,12 @@ def load_plate(board: Board) -> Image.Image | None:
         return None
     path = Path(photo.path)
     if not path.exists():
+        log.warning("headline image missing from disk: %s", path)
         return None
     try:
         with Image.open(path) as handle:
             handle.load()
-            if "A" not in handle.getbands():
-                return None
-            return handle.convert("RGBA")
+            return handle.convert("RGBA" if "A" in handle.getbands() else "RGB")
     except (OSError, UnidentifiedImageError) as exc:
         log.warning("could not read %s: %s", path, exc)
         return None
@@ -84,10 +83,17 @@ def run(
             log.info("rendering board generated %.1fh ago", age)
         if board.headline is not None:
             headline = board.headline.species.common_name
-        plate = load_plate(board)
-        if plate is not None:
-            log.info("headline has a plate; drawing the quiet board")
-            image = PlateBoardRenderer(config).render(board, plate)
+        headline_image = load_headline_image(board)
+        is_plate = headline_image is not None and "A" in headline_image.getbands()
+        # The quiet board takes either kind of picture. The photo board is
+        # built around a 480px square on the left of a landscape panel, so
+        # it has nothing to say about a frame hanging on its side.
+        if config.display.portrait or is_plate:
+            log.info(
+                "drawing the quiet board (%s)",
+                "plate" if is_plate else "photograph",
+            )
+            image = PlateBoardRenderer(config).render(board, headline_image)
         else:
             image = renderer.render(board)
 

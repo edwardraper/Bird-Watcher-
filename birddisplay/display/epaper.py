@@ -68,8 +68,7 @@ class EPaperDisplay:
             raise ValueError(
                 "EPaperDisplay expects a palettised board -- see render.palette"
             )
-        if self.config.display.rotate == 180:
-            image = image.rotate(180)
+        image = self._to_panel(image)
         if image.size != (self.width, self.height):
             raise ValueError(
                 f"board is {image.size}, panel is {(self.width, self.height)}"
@@ -85,6 +84,22 @@ class EPaperDisplay:
             # Non-negotiable: the panel must not be left awake.
             self._sleep()
         log.info("panel refresh complete")
+
+    def _to_panel(self, image: Image.Image) -> Image.Image:
+        """Turn a composed board to match how the frame hangs.
+
+        expand=True so a 480x800 portrait board becomes the 800x480 the
+        panel expects; Image.ROTATE_* is a transpose, so no resampling and
+        no palette damage.
+        """
+        rotate = self.config.display.rotate
+        if rotate == 90:
+            return image.transpose(Image.Transpose.ROTATE_90)
+        if rotate == 180:
+            return image.transpose(Image.Transpose.ROTATE_180)
+        if rotate == 270:
+            return image.transpose(Image.Transpose.ROTATE_270)
+        return image
 
     def clear(self) -> None:
         """Blank the panel to white. Use before storing it for a while."""

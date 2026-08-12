@@ -170,7 +170,9 @@ def test_show_renders_the_cache_to_a_png(config, wired, tmp_path):
 
     assert show_module.main(["--preview", "--preview-path", str(out)]) == 0
     with Image.open(out) as image:
-        assert image.size == (800, 480)
+        # As composed. The preview is the board before the display backend
+        # turns it for a frame hanging on its side.
+        assert image.size == config.display.board_size
 
 
 def test_show_draws_a_placeholder_when_there_is_no_cache(config, wired, tmp_path):
