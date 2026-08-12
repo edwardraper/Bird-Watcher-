@@ -1,0 +1,264 @@
+"""The frame's decision logic, run on a laptop.
+
+main.py runs on a Pico 2 W under MicroPython, so none of it can be
+imported here without help. What can be tested is the part that actually
+matters and is easy to get wrong: when does it refresh the panel?
+
+Getting that wrong is expensive in both directions. Refresh too eagerly
+and a battery display drives a thirty-second panel update every two hours
+forever; refresh too shyly and the wall quietly stops being true. So the
+hardware, the network and the decoder are stubbed, and these tests ask
+only: given this manifest and this saved state, did it draw?
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+import time
+import types
+from pathlib import Path
+
+import pytest
+
+FIRMWARE = Path(__file__).resolve().parent.parent / "firmware" / "inky_frame" / "main.py"
+
+
+class FakeLed:
+    def __init__(self) -> None:
+        self.on_count = 0
+
+    def on(self) -> None:
+        self.on_count += 1
+
+    def off(self) -> None:
+        pass
+
+
+class FakeInkyFrame(types.ModuleType):
+    """Stands in for the board: LEDs, the RTC, and the power cut."""
+
+    def __init__(self) -> None:
+        super().__init__("inky_frame")
+        self.led_wifi = FakeLed()
+        self.led_busy = FakeLed()
+        self.slept_for: list[int] = []
+        self.button = False
+        self.clock_set = 0
+
+    def pcf_to_pico_rtc(self) -> None:
+        pass
+
+    def set_time(self) -> None:
+        self.clock_set += 1
+
+    def woken_by_button(self) -> bool:
+        return self.button
+
+    def sleep_for(self, minutes: int) -> None:
+        self.slept_for.append(minutes)
+
+
+class FakeSocket:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.offset = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if size is None or size < 0:
+            size = len(self.payload) - self.offset
+        chunk = self.payload[self.offset : self.offset + size]
+        self.offset += len(chunk)
+        return chunk
+
+    def close(self) -> None:
+        pass
+
+
+class FakeNetwork:
+    """A wifi radio that connects, or does not."""
+
+    STA_IF = 0
+
+    def __init__(self, connected: bool = True) -> None:
+        self.connected = connected
+
+    def WLAN(self, _interface: int):  # noqa: N802 - matching MicroPython
+        outer = self
+
+        class _Wlan:
+            def active(self, _state: bool) -> None:
+                pass
+
+            def isconnected(self) -> bool:
+                return outer.connected
+
+            def connect(self, _ssid: str, _password: str) -> None:
+                pass
+
+            def disconnect(self) -> None:
+                pass
+
+            def ifconfig(self):
+                return ("10.0.0.9", "", "", "")
+
+        return _Wlan()
+
+
+@pytest.fixture
+def frame(tmp_path: Path, monkeypatch):
+    """Load main.py with every hardware module replaced by a stub."""
+    inky = FakeInkyFrame()
+    net = FakeNetwork()
+
+    drawn: list[str] = []
+    manifest = {"sha256": "abc123", "bytes": 4, "headline": "Robin"}
+    responses = {"manifest": manifest, "image": b"PNG!"}
+
+    urequest = types.ModuleType("urequest")
+
+    def urlopen(url: str):
+        if url.endswith(".json"):
+            return FakeSocket(json.dumps(responses["manifest"]).encode())
+        return FakeSocket(responses["image"])
+
+    urequest.urlopen = urlopen  # type: ignore[attr-defined]
+    urllib = types.ModuleType("urllib")
+    urllib.urequest = urequest  # type: ignore[attr-defined]
+
+    pngdec = types.ModuleType("pngdec")
+    pngdec.PNG_COPY = 1  # type: ignore[attr-defined]
+
+    class FakePNG:
+        def __init__(self, _graphics) -> None:
+            pass
+
+        def open_file(self, path: str) -> None:
+            drawn.append(path)
+
+        def decode(self, _x, _y, mode=None) -> None:
+            assert mode == pngdec.PNG_COPY, "must not re-dither the board"
+
+    pngdec.PNG = FakePNG  # type: ignore[attr-defined]
+
+    picographics = types.ModuleType("picographics")
+    picographics.DISPLAY_INKY_FRAME_7 = 7  # type: ignore[attr-defined]
+    picographics.PicoGraphics = lambda _display: types.SimpleNamespace(  # type: ignore[attr-defined]
+        update=lambda: drawn.append("update")
+    )
+
+    secrets = types.ModuleType("secrets")
+    secrets.WIFI_SSID = "net"  # type: ignore[attr-defined]
+    secrets.WIFI_PASSWORD = "pw"  # type: ignore[attr-defined]
+    secrets.MANIFEST_URL = "https://example.invalid/board.json"  # type: ignore[attr-defined]
+    secrets.BOARD_URL = "https://example.invalid/board.png"  # type: ignore[attr-defined]
+
+    for name, module in {
+        "inky_frame": inky,
+        "network": net,
+        "pngdec": pngdec,
+        "picographics": picographics,
+        "urllib": urllib,
+        "secrets": secrets,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, module)
+
+    spec = importlib.util.spec_from_file_location("frame_main", FIRMWARE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    # Keep the device's writes inside tmp_path.
+    module.IMAGE_PATH = str(tmp_path / "board.png")
+    module.PART_PATH = str(tmp_path / "board.png.part")
+    module.STATE_PATH = str(tmp_path / "last.json")
+
+    return types.SimpleNamespace(
+        main=module,
+        inky=inky,
+        net=net,
+        drawn=drawn,
+        responses=responses,
+        state_path=Path(module.STATE_PATH),
+    )
+
+
+def save_state(frame, **fields) -> None:
+    state = {"sha256": "", "refreshed_at": 0, "failures": 0}
+    state.update(fields)
+    frame.state_path.write_text(json.dumps(state))
+
+
+def test_a_new_board_is_downloaded_and_drawn(frame) -> None:
+    minutes = frame.main.cycle()
+    assert "update" in frame.drawn
+    assert minutes == frame.main.REFRESH_MINUTES
+    assert json.loads(frame.state_path.read_text())["sha256"] == "abc123"
+
+
+def test_an_unchanged_board_never_touches_the_panel(frame) -> None:
+    """The whole reason the manifest exists: most two-hour windows bring
+    no change, and a refresh costs 30 seconds of driving the panel."""
+    save_state(frame, sha256="abc123", refreshed_at=time.time())
+    minutes = frame.main.cycle()
+    assert frame.drawn == []
+    assert minutes == frame.main.REFRESH_MINUTES
+
+
+def test_a_day_without_a_refresh_forces_one(frame) -> None:
+    """E-ink that holds one image for a long time starts to ghost."""
+    save_state(
+        frame,
+        sha256="abc123",
+        refreshed_at=time.time() - (frame.main.FORCE_REFRESH_HOURS + 1) * 3600,
+    )
+    frame.main.cycle()
+    assert "update" in frame.drawn
+
+
+def test_a_button_press_forces_a_refresh(frame) -> None:
+    save_state(frame, sha256="abc123", refreshed_at=time.time())
+    frame.inky.button = True
+    frame.main.cycle()
+    assert "update" in frame.drawn
+
+
+def test_no_network_leaves_the_panel_alone(frame) -> None:
+    frame.net.connected = False
+    minutes = frame.main.cycle()
+    assert frame.drawn == []
+    assert minutes == frame.main.RETRY_MINUTES
+    assert json.loads(frame.state_path.read_text())["failures"] == 1
+
+
+def test_repeated_failures_stop_retrying(frame) -> None:
+    """Retrying every 15 minutes into a dead router until the battery is
+    flat helps nobody."""
+    frame.net.connected = False
+    save_state(frame, failures=frame.main.MAX_RETRIES - 1)
+    minutes = frame.main.cycle()
+    assert minutes == frame.main.REFRESH_MINUTES
+    assert json.loads(frame.state_path.read_text())["failures"] == 0
+
+
+def test_a_truncated_download_is_not_drawn(frame) -> None:
+    """The manifest says how many bytes to expect, so a connection that
+    drops halfway cannot reach the decoder."""
+    frame.responses["manifest"] = {"sha256": "def456", "bytes": 99999}
+    minutes = frame.main.cycle()
+    assert frame.drawn == []
+    assert minutes == frame.main.RETRY_MINUTES
+
+
+def test_a_failed_refresh_does_not_record_a_sha(frame) -> None:
+    """Otherwise the next cycle would think it had already drawn it."""
+    frame.responses["manifest"] = {"sha256": "def456", "bytes": 99999}
+    frame.main.cycle()
+    assert json.loads(frame.state_path.read_text())["sha256"] == ""
+
+
+def test_the_clock_is_only_set_when_it_is_wrong(frame) -> None:
+    frame.main.cycle()
+    # The host clock is correct, so NTP is not needed.
+    assert frame.inky.clock_set == 0

@@ -1,8 +1,9 @@
 # Bird Watcher
 
 A wall display showing what birds are being seen and heard in the local region
-right now, from the public eBird API, on a Waveshare 7.3in Spectra 6 e-paper
-panel driven by a Raspberry Pi Zero 2 WH.
+right now, from the public eBird API, on a six-colour e-paper panel: either a
+Waveshare 7.3in Spectra 6 driven by a Raspberry Pi Zero 2 WH, or a battery
+Pimoroni Inky Frame 7.3in fed by GitHub Actions every two hours.
 
 No personal account data — just what the region is reporting.
 
@@ -26,9 +27,10 @@ showing yesterday's board rather than an error or a blank screen. This split is
 the single most important design decision in the project, and the tests enforce
 it — `show` is asserted never to open a socket.
 
-The display is behind a one-method interface with two implementations:
-`EPaperDisplay` (the panel, importable only on the Pi) and `PreviewDisplay`
-(writes `preview.png`). Every layout decision can therefore be made on a laptop
+The display is behind a one-method interface with three implementations:
+`EPaperDisplay` (the panel, importable only on the Pi), `PreviewDisplay`
+(writes `preview.png`) and `InkyExportDisplay` (writes the PNG an Inky Frame
+fetches over wifi). Every layout decision can therefore be made on a laptop
 with a fast feedback loop, which matters because a Spectra 6 full refresh takes
 about 30 seconds and has no partial update.
 
@@ -189,6 +191,46 @@ panel is sent ink indices either way. The middle row is every two-ink
 checkerboard, which is what dithering actually produces, and tells you more
 about mixed tones than the flat swatches do.
 
+## The other hardware path: an Inky Frame
+
+The board also runs on a **Pimoroni Inky Frame 7.3" (Pico 2 W)**, and that
+changes where the work happens. The Inky Frame is not a smaller Pi — it is a
+microcontroller. No Linux, no CPython, no Pillow, no SQLite, and the plate
+database alone is many times its free flash. Nothing in `birddisplay/` can
+run on it.
+
+So the split moves. Everything that decides what the board says runs in
+GitHub Actions; the frame only fetches a finished picture.
+
+```
+Actions, every 2h   fetch.py → cache.json → show.py --backend inky
+                                              ↓
+                                    board.png + board.json  →  branch `board`
+                                              ↓  https
+Inky Frame          wake → sha changed? → download → PNG_COPY → refresh → sleep 2h
+```
+
+The cache-file boundary the project is built around survives intact: it is
+just longer, and made of HTTPS. The frame never talks to eBird, never sees
+an API key, and if the download fails it leaves the panel alone — e-ink
+holds its last image with no power, so a failure is a board that is a few
+hours old rather than an error on the wall.
+
+**The image is a palettised PNG, not a JPEG.** The frame decodes it with
+`pngdec` in `PNG_COPY` mode, which copies palette indices straight into the
+framebuffer. Every Inky example downloads JPEGs and lets `jpegdec` dither
+them, and that would undo the rule this project is built on: text is never
+dithered. `INKY_PEN_CODES` in `render/palette.py` reorders our six inks into
+PicoGraphics pen order, the same job `WIRE_CODES` does for the Waveshare
+panel.
+
+Setup is in [`firmware/inky_frame/README.md`](firmware/inky_frame/README.md).
+To see exactly what the frame will draw:
+
+```bash
+python -m birddisplay.show --backend inky --preview-path board.png
+```
+
 ## Pi setup
 
 ```bash
@@ -260,12 +302,15 @@ interesting ones:
 ## Development
 
 ```bash
-python -m pytest              # 155 tests, no network, no hardware
+python -m pytest              # 175 tests, no network, no hardware
 ```
 
 The eBird responses in `tests/fixtures/` are hand-built from the real API
 shapes. Hardware behaviour is tested against a fake driver that records the
 call sequence — including that the panel sleeps even when the refresh throws.
+The frame's firmware is MicroPython and cannot be imported here, so its
+hardware modules are stubbed and the one thing worth testing is: given this
+manifest and this saved state, did it refresh the panel?
 
 ```
 birddisplay/
@@ -274,7 +319,7 @@ birddisplay/
 ├── cache.py             # atomic writes, staleness, featured-species memory
 ├── sources/             # ebird, taxonomy, images, plates, HTTP client
 ├── render/              # palette, fonts, layout, plate_board
-├── display/             # Display protocol, epaper, preview
+├── display/             # Display protocol, epaper, preview, inky_export
 ├── vendor/              # Waveshare epd7in3e + epdconfig, unmodified
 ├── fetch.py             # entrypoint: refresh the cache
 └── show.py              # entrypoint: draw the cache

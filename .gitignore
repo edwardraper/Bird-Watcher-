@@ -17,3 +17,11 @@ dither_lab*.png
 # Never commit the API key.
 .env
 birddisplay.env
+
+# The frame's wifi credentials. secrets.example.py is the template.
+firmware/inky_frame/secrets.py
+
+# Exported boards. The workflow publishes these to the `board` branch;
+# a local run should not leave them in the working tree.
+board.png
+board.json
