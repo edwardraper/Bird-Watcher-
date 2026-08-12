@@ -160,6 +160,11 @@ class Board:
     also_seen: list[Sighting] = field(default_factory=list)
     species_count: int = 0
     checklist_note: str = ""
+    # A sentence or two about the headline bird, taken from Wikipedia at
+    # fetch time. It lives on the cache rather than being looked up when
+    # the board is drawn, because the renderer never opens a socket --
+    # that is what keeps yesterday's board on the wall through an outage.
+    headline_description: str = ""
     schema_version: int = SCHEMA_VERSION
 
     def age_hours(self, now: datetime | None = None) -> float:
@@ -184,6 +189,7 @@ class Board:
             "also_seen": [s.to_dict() for s in self.also_seen],
             "species_count": self.species_count,
             "checklist_note": self.checklist_note,
+            "headline_description": self.headline_description,
         }
 
     @classmethod
@@ -203,5 +209,8 @@ class Board:
             also_seen=[Sighting.from_dict(s) for s in data.get("also_seen", [])],
             species_count=int(data.get("species_count", 0)),
             checklist_note=data.get("checklist_note", ""),
+            # Absent from caches written before the description existed,
+            # and the board reads perfectly well without one.
+            headline_description=data.get("headline_description", ""),
             schema_version=version,
         )

@@ -58,6 +58,38 @@ def _shorten(text: str, limit: int = 60) -> str:
     return text[: limit - 1].rstrip() + "…"
 
 
+# A full stop that ends a sentence, as opposed to one inside an
+# abbreviation or a binomial. Requires whitespace and a capital after it,
+# which keeps "Turdus merula L." and "c. 25 cm" from splitting a sentence
+# in half.
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z(])")
+
+
+def _first_sentences(text: str, max_chars: int) -> str:
+    """As many whole sentences as fit, or "" if even the first will not.
+
+    Never cuts mid-sentence. A description on a wall is read at a glance
+    and an ellipsis in the middle of a clause reads as something broken
+    rather than as something abridged, so a first sentence too long for
+    the space is dropped entirely and the board simply shows the name.
+    """
+    text = text.strip()
+    if not text:
+        return ""
+    kept: list[str] = []
+    length = 0
+    for sentence in _SENTENCE_END_RE.split(text):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        extra = len(sentence) + (1 if kept else 0)
+        if length + extra > max_chars:
+            break
+        kept.append(sentence)
+        length += extra
+    return " ".join(kept)
+
+
 @dataclass(frozen=True)
 class _FileRef:
     """A Commons (or local enwiki) file we intend to download."""
@@ -125,6 +157,35 @@ class ImageSource:
             log.info("%r is a disambiguation page; skipping", title)
             return None
         return data
+
+    def description_for(self, species: Species, max_chars: int = 200) -> str:
+        """A sentence or two about the bird, for under its name.
+
+        The same Wikipedia summary the lead-image lookup already asks
+        for, read for its `extract` instead of its picture -- so a board
+        with a plate headline pays one request for this and a board with
+        a photograph pays none, the response being the one it wanted
+        anyway.
+
+        Whole sentences only. The board has room for two at most, and a
+        line ending mid-clause on a wall reads as a bug rather than as
+        brevity, so this stops at the last full stop that fits and
+        returns nothing rather than a fragment.
+        """
+        for title in (species.scientific_name, species.common_name):
+            if not title or not title.strip():
+                continue
+            summary = self._summary(title)
+            if summary is None:
+                continue
+            extract = _clean_html(summary.get("extract") or "")
+            if not extract:
+                continue
+            trimmed = _first_sentences(extract, max_chars)
+            if trimmed:
+                return trimmed
+            log.info("Wikipedia extract for %r had no sentence short enough", title)
+        return ""
 
     def _lead_image(self, species: Species) -> _FileRef | None:
         """Find the lead image of the species' Wikipedia article.

@@ -52,8 +52,10 @@ dir = "~/.cache/birddisplay"
 max_age_hours = 48
 
 [board]
-# How many species in the "also seen nearby" column.
-also_seen_count = 8
+# How many species in the "other sightings" line, rarest first.
+# Three is what fits the board once the bird has a description under
+# its name, and the three rarest are the three worth naming.
+also_seen_count = 3
 # Don't feature the same species again until this many cycles have passed.
 feature_memory = 6
 # Prefer a notable sighting as the headline if one exists.

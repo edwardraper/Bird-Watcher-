@@ -47,9 +47,18 @@ from .palette import Ink, fit_cover, new_canvas, quantize_photo
 
 log = logging.getLogger(__name__)
 
-FOOTER_LABEL = "ALSO SEEN"
+FOOTER_LABEL = "OTHER SIGHTINGS"
 SEPARATOR = " · "
 HEADER_Y = 30
+
+# At most this many lines of description. The bird is the subject and the
+# sentence is a caption to it; past three lines the board starts to read
+# as a page about a bird rather than a picture of one.
+DESCRIPTION_LINES = 3
+
+# A centred paragraph set to the full column reads as a slab. Measuring it
+# narrower than the rules above and below gives it an edge to sit inside.
+DESCRIPTION_COLUMN = 0.86
 
 
 def _tracked_width(text: str, font, tracking: float) -> float:
@@ -121,6 +130,7 @@ class PlateBoardRenderer:
         self.detail = F.load_font("times", 17)
         self.label = F.load_font("times_bold", 12)
         self.listing = F.load_font("times", 16 if self.portrait else 17)
+        self.blurb = F.load_font("times", 15 if self.portrait else 16)
         self.credit = F.load_font("times", 13)
         self.name_sizes = (56, 48, 42, 36, 30) if self.portrait else (60, 52, 44, 38, 32)
 
@@ -252,11 +262,26 @@ class PlateBoardRenderer:
             (self.margin, rule_y, self.width - self.margin, rule_y), fill=int(Ink.BLACK)
         )
 
+        # Centred, label and names alike. The block below the rule is a
+        # caption to the whole board rather than a column of its own, and
+        # with only three names it is short enough that ranging it left
+        # left a long tail of white paper to the right of it.
+        centre = self.width / 2
+
         y = top
-        _draw_tracked(draw, (self.margin, y), FOOTER_LABEL, self.label, Ink.BLACK, 2.8)
+        _draw_tracked(
+            draw,
+            (centre - _tracked_width(FOOTER_LABEL, self.label, 2.8) / 2, y),
+            FOOTER_LABEL,
+            self.label,
+            Ink.BLACK,
+            2.8,
+        )
         y += label_height + 4
         for line in lines:
-            draw.text((self.margin, y), line, font=self.listing, fill=int(Ink.BLACK))
+            draw.text(
+                (centre, y), line, font=self.listing, fill=int(Ink.BLACK), anchor="ma"
+            )
             y += listing_height
 
         credit = board.headline_photo.credit_line if board.headline_photo else ""
@@ -289,7 +314,23 @@ class PlateBoardRenderer:
         height = 18 + F.line_height(font) + F.line_height(self.scientific) + 10
         if board.headline and self._detail_line(board.headline):
             height += F.line_height(self.detail) + 10
+        blurb = self._description_lines(board, column)
+        if blurb:
+            height += len(blurb) * F.line_height(self.blurb) + 12
         return int(footer_top - self.rule_gap - height)
+
+    def _description_lines(self, board: Board, column: float) -> list[str]:
+        """The sentence about the bird, wrapped, or nothing at all.
+
+        Nothing at all is the common case on an old cache and on any
+        board whose headline Wikipedia has no article for, so every
+        caller asks before it reserves room: the plate simply grows into
+        the space instead.
+        """
+        text = (board.headline_description or "").strip()
+        if not text:
+            return []
+        return F.wrap(text, self.blurb, column * DESCRIPTION_COLUMN, DESCRIPTION_LINES)
 
     def _draw_subject_centred(
         self, draw: ImageDraw.ImageDraw, board: Board, top: int
@@ -327,6 +368,13 @@ class PlateBoardRenderer:
                 fill=int(Ink.BLACK),
                 anchor="ma",
             )
+            y += F.line_height(self.detail) + 10
+
+        for line in self._description_lines(board, column):
+            draw.text(
+                (centre, y), line, font=self.blurb, fill=int(Ink.BLACK), anchor="ma"
+            )
+            y += F.line_height(self.blurb)
 
     def _draw_subject_left(
         self, draw: ImageDraw.ImageDraw, board: Board, header_bottom: int
@@ -362,6 +410,13 @@ class PlateBoardRenderer:
                 font=self.detail,
                 fill=int(Ink.BLACK),
             )
+            y += F.line_height(self.detail) + 10
+
+        # Ranged left with the rest of this column, and measured to the
+        # column rather than the page: the picture is in the right half.
+        for line in self._description_lines(board, column):
+            draw.text((self.margin, y), line, font=self.blurb, fill=int(Ink.BLACK))
+            y += F.line_height(self.blurb)
 
     # -- the picture -------------------------------------------------------
 

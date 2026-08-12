@@ -21,6 +21,7 @@ from .cache import load_state, record_featured, save_board, save_state
 from .config import Config, ConfigError, load_config
 from .log import setup_logging
 from .model import Board, Sighting
+from .sources.commonness import Commonness
 from .sources.ebird import EbirdClient
 from .sources.http import FetchError, HttpClient
 from .sources.images import ImageSource, ImageUnavailable
@@ -141,6 +142,20 @@ def build_board(
     headline_code = headline.species.code if headline else None
     also_seen = [s for s in recent if s.species.code != headline_code]
 
+    # Rarest first. The board shows only a handful of these, so which few
+    # it shows matters more than their order: a Yellowhammer is worth the
+    # slot that a Woodpigeon was taking.
+    commonness = Commonness.load()
+    if commonness:
+        also_seen = commonness.rarest_first(also_seen)
+
+    description = ""
+    if headline is not None and images is not None:
+        try:
+            description = images.description_for(headline.species)
+        except Exception:  # noqa: BLE001 - a missing sentence is not a failed fetch
+            log.exception("could not fetch a description for %s", headline.species.code)
+
     region = config.region
     note = (
         f"{len(recent)} species within {region.radius_km} km "
@@ -155,6 +170,7 @@ def build_board(
         also_seen=also_seen[: max(config.board.also_seen_count * 2, 16)],
         species_count=len(recent),
         checklist_note=note,
+        headline_description=description,
     )
     return board, headline
 
