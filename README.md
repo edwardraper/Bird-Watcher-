@@ -46,10 +46,19 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
 export EBIRD_API_KEY=...          # https://ebird.org/api/keygen
+python -m scripts.check_api       # verify the key, region and API shapes
 python -m birddisplay.fetch -v    # writes the cache
 python -m birddisplay.show --preview --scale 2
 open preview.png
 ```
+
+Run `check_api` first. The API clients were written against the documented
+response shapes and are tested against recorded fixtures, so this is the step
+that confirms those assumptions hold for your key, your region and the live
+API — it checks authentication, the region code, the response shape the board
+builder depends on, whether `sppLocale` is actually giving you British names,
+and the Wikimedia image and attribution path. Anything that is not `ok` comes
+with a line saying what to do about it.
 
 Before the first run, set your region in `config.toml`. Confirm the code rather
 than assuming it:
@@ -187,7 +196,7 @@ interesting ones:
 ## Development
 
 ```bash
-python -m pytest              # 115 tests, no network, no hardware
+python -m pytest              # 124 tests, no network, no hardware
 ```
 
 The eBird responses in `tests/fixtures/` are hand-built from the real API
