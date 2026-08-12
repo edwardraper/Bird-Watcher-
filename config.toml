@@ -50,6 +50,25 @@ feature_memory = 6
 # Prefer a notable sighting as the headline if one exists.
 prefer_notable = true
 
+[plates]
+# Keulemans lithographs with their paper cut away, built ahead of time by
+# scripts/build_plate_db.py and shipped in the repository. Consulted
+# before Wikimedia: it needs no network, cannot be rate-limited, and a
+# lithograph survives six inks far better than a photograph does.
+enabled = true
+# Relative paths resolve against this file.
+path = "assets/plates/keulemans_uk.sqlite"
+# false puts photographs first and falls back to a plate only when
+# Wikimedia has nothing usable.
+prefer_plates = true
+# Pre-dither treatment, and deliberately not the [image] numbers below.
+# Those push saturation hard, which is what a photograph needs and what
+# turns a pale lithograph into orange confetti. A drawing is flat colour
+# already; contrast is what holds the bird apart from the paper.
+saturation = 1.05
+contrast = 1.25
+sharpness = 1.20
+
 [image]
 # Photo enhancement before dithering. Six colours need the help.
 # Tune these against the physical panel, not your monitor:

@@ -218,7 +218,9 @@ class PlateBoardRenderer:
         # Dither against white, which is what it will actually sit on.
         flattened = Image.new("RGB", image.size, (255, 255, 255))
         flattened.paste(image, mask=image.split()[3])
-        dithered = quantize_photo(flattened, self.config.image, self.config.palette)
+        dithered = quantize_photo(
+            flattened, self.config.plates.enhancement, self.config.palette
+        )
 
         mask = image.split()[3].point(lambda a: 255 if a > 128 else 0)
         x = box_left + (box_width - image.width) // 2

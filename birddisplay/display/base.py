@@ -1,8 +1,9 @@
 """The display interface, and the factory that picks a backend.
 
-One interface, two implementations. Everything upstream of here composes
+One interface, three implementations. Everything upstream of here composes
 an 800x480 palettised image and hands it over; only the backend knows
-whether that ends up on a panel or in a PNG.
+whether that ends up on a panel wired to this machine, in a preview PNG,
+or in a file an Inky Frame will fetch over WiFi two hours from now.
 """
 
 from __future__ import annotations
@@ -35,18 +36,25 @@ def create_display(
     prefer_preview: bool = False,
     preview_path: Path | None = None,
     scale: int = 1,
+    backend: str | None = None,
 ) -> Display:
     """Build the configured display backend.
 
     prefer_preview (the --preview flag) always wins, so you can render on
-    the Pi without waking the panel. preview_path and scale are ignored by
-    the e-paper backend.
+    the Pi without waking the panel. An explicit backend argument beats
+    the config file but not --preview. preview_path and scale are ignored
+    by the panel and export backends.
     """
-    backend = "preview" if prefer_preview else config.display.backend
-    if backend == "preview":
+    chosen = "preview" if prefer_preview else (backend or config.display.backend)
+    if chosen == "preview":
         from .preview import PreviewDisplay
 
         return PreviewDisplay(config, path=preview_path, scale=scale)
+
+    if chosen == "inky":
+        from .inky_export import InkyExportDisplay
+
+        return InkyExportDisplay(config, path=preview_path)
 
     from .epaper import EPaperDisplay
 

@@ -15,13 +15,43 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from PIL import Image, UnidentifiedImageError
+
 from .cache import CacheCorrupt, CacheMissing, load_board
 from .config import Config, ConfigError, load_config
 from .display.base import create_display
 from .log import setup_logging
+from .model import Board
 from .render.layout import BoardRenderer
+from .render.plate_board import PlateBoardRenderer
 
 log = logging.getLogger("birddisplay.show")
+
+
+def load_plate(board: Board) -> Image.Image | None:
+    """The headline image, but only if it is a cut-out plate.
+
+    Which layout to draw is decided by what the image *is* rather than by
+    anything recorded in the cache: a plate has had its paper removed and
+    so carries an alpha channel, and a photograph is a solid rectangle.
+    That keeps the cache schema out of it, and means an old cache written
+    before plates existed still renders correctly.
+    """
+    photo = board.headline_photo
+    if photo is None or not photo.path:
+        return None
+    path = Path(photo.path)
+    if not path.exists():
+        return None
+    try:
+        with Image.open(path) as handle:
+            handle.load()
+            if "A" not in handle.getbands():
+                return None
+            return handle.convert("RGBA")
+    except (OSError, UnidentifiedImageError) as exc:
+        log.warning("could not read %s: %s", path, exc)
+        return None
 
 
 def run(
@@ -29,8 +59,10 @@ def run(
     preview: bool = False,
     preview_path: Path | None = None,
     scale: int = 1,
+    backend: str | None = None,
 ) -> int:
     renderer = BoardRenderer(config)
+    headline = ""
 
     try:
         board = load_board(config.cache.board_path)
@@ -50,11 +82,26 @@ def run(
             log.warning("cache is %.1fh old; marking the board stale", age)
         else:
             log.info("rendering board generated %.1fh ago", age)
-        image = renderer.render(board)
+        if board.headline is not None:
+            headline = board.headline.species.common_name
+        plate = load_plate(board)
+        if plate is not None:
+            log.info("headline has a plate; drawing the quiet board")
+            image = PlateBoardRenderer(config).render(board, plate)
+        else:
+            image = renderer.render(board)
 
     display = create_display(
-        config, prefer_preview=preview, preview_path=preview_path, scale=scale
+        config,
+        prefer_preview=preview,
+        preview_path=preview_path,
+        scale=scale,
+        backend=backend,
     )
+    # The export backend puts the headline in its manifest, so a frame can
+    # say what it is showing without decoding the PNG.
+    if hasattr(display, "headline"):
+        display.headline = headline
     try:
         display.show(image)
     finally:
@@ -70,7 +117,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="write a PNG instead of driving the panel",
     )
-    parser.add_argument("--preview-path", help="where to write the preview PNG")
+    parser.add_argument("--preview-path", help="where to write the output PNG")
+    parser.add_argument(
+        "--backend",
+        choices=("epaper", "preview", "inky"),
+        help="override [display].backend: the panel, a preview PNG, or a "
+        "board.png plus manifest for an Inky Frame to fetch",
+    )
     parser.add_argument(
         "--scale",
         type=int,
@@ -90,9 +143,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return run(
             config,
-            preview=args.preview or bool(args.preview_path),
+            preview=args.preview or (bool(args.preview_path) and not args.backend),
             preview_path=Path(args.preview_path) if args.preview_path else None,
             scale=args.scale,
+            backend=args.backend,
         )
     except Exception:  # noqa: BLE001 - a render crash must not leave the panel awake
         log.exception("failed to draw the board")

@@ -74,6 +74,14 @@ def _load_photo(path: str | None) -> Image.Image | None:
         return None
     try:
         with Image.open(file_path) as handle:
+            handle.load()
+            if "A" in handle.getbands():
+                # A cut-out plate drawn on the photo board: flatten it onto
+                # white rather than letting convert("RGB") fill the paper
+                # with black.
+                flattened = Image.new("RGB", handle.size, (255, 255, 255))
+                flattened.paste(handle, mask=handle.convert("RGBA").split()[3])
+                return flattened
             return handle.convert("RGB")
     except (OSError, UnidentifiedImageError) as exc:
         log.warning("could not read %s: %s", file_path, exc)
