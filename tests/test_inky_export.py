@@ -39,13 +39,20 @@ EXPECTED_PEN = {
 
 
 def striped_board(config: Config) -> Image.Image:
-    """A board using every ink, one vertical band each."""
-    canvas = new_canvas(config.display.width, config.display.height, config.palette)
-    band = config.display.width // len(Ink)
+    """A board using every ink, one vertical band each.
+
+    Composed at board_size, not panel size: with the frame hung on its
+    side the renderer draws 480x800 and the backend turns it on the way
+    out, so a board built to the width of the glass is the one shape the
+    export will refuse.
+    """
+    width, height = config.display.board_size
+    canvas = new_canvas(width, height, config.palette)
+    band = width // len(Ink)
     pixels = canvas.load()
     for ink in Ink:
         for x in range(int(ink) * band, (int(ink) + 1) * band):
-            for y in range(config.display.height):
+            for y in range(height):
                 pixels[x, y] = int(ink)
     return canvas
 
@@ -57,7 +64,7 @@ def board_image(config: Config) -> Image.Image:
 
 def test_every_ink_lands_on_the_right_pen(config: Config, board_image) -> None:
     exported = to_inky_png(board_image, config.palette)
-    band = config.display.width // len(Ink)
+    band = board_image.width // len(Ink)
     for ink, pen in EXPECTED_PEN.items():
         x = int(ink) * band + band // 2
         assert exported.getpixel((x, 10)) == pen, f"{ink.name} went to the wrong pen"
@@ -89,6 +96,8 @@ def test_export_is_palettised_and_panel_sized(
 
     with Image.open(display.path) as reopened:
         assert reopened.mode == "P"
+        # Panel size, not board size: the frame decodes straight into its
+        # framebuffer, so what it fetches is already the right way up.
         assert reopened.size == (config.display.width, config.display.height)
 
 
@@ -101,7 +110,9 @@ def test_saving_does_not_renumber_the_indices(
     display = InkyExportDisplay(config, path=tmp_path / "board.png")
     display.show(board_image)
 
-    expected = to_inky_png(board_image, config.palette)
+    # Rotated the same way show() rotates it, so this compares indices
+    # and not orientation -- that is test_rotation_is_applied's job.
+    expected = to_inky_png(display._to_panel(board_image), config.palette)
     with Image.open(display.path) as reopened:
         assert reopened.tobytes() == expected.tobytes()
 
@@ -141,17 +152,44 @@ def test_nothing_is_left_half_written(
     assert sorted(p.name for p in tmp_path.iterdir()) == ["board.json", "board.png"]
 
 
-def test_rotation_is_applied(config: Config, board_image, tmp_path: Path) -> None:
+def test_rotation_is_applied(config: Config, tmp_path: Path) -> None:
     rotated_config = replace(
         config, display=replace(config.display, rotate=180)
     )
+    # Built for the 180 config, which is landscape: a portrait board sent
+    # to a landscape frame is a size error, not a rotation test.
+    landscape_board = striped_board(rotated_config)
     display = InkyExportDisplay(rotated_config, path=tmp_path / "board.png")
-    display.show(board_image)
+    display.show(landscape_board)
 
-    band = config.display.width // len(Ink)
+    band = landscape_board.width // len(Ink)
     with Image.open(display.path) as reopened:
         # The leftmost band was black; upside down it is the rightmost.
         assert reopened.getpixel((config.display.width - band // 2, 10)) == 0
+
+
+def test_a_portrait_board_is_exported_the_right_way_up(
+    config: Config, tmp_path: Path
+) -> None:
+    """A frame hung on its side must have its board turned, not just fitted.
+
+    The board is composed 480x800 with black down its left edge. Turned 90
+    degrees that edge becomes the bottom of an 800x480 export -- a dropped
+    rotation would be caught by the size check, but a rotation the wrong
+    way round produces a correctly sized board with the bird upside down,
+    and only a pixel says so.
+    """
+    portrait_config = replace(config, display=replace(config.display, rotate=90))
+    portrait_board = striped_board(portrait_config)
+    assert portrait_board.size == (480, 800)
+
+    display = InkyExportDisplay(portrait_config, path=tmp_path / "board.png")
+    display.show(portrait_board)
+
+    band = portrait_board.width // len(Ink)
+    with Image.open(display.path) as reopened:
+        assert reopened.size == (config.display.width, config.display.height)
+        assert reopened.getpixel((10, config.display.height - band // 2)) == 0
 
 
 def test_a_wrong_sized_board_is_refused(config: Config, tmp_path: Path) -> None:

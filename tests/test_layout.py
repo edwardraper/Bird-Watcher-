@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from PIL import Image, ImageDraw
 
 from birddisplay.model import Board, Photo, Sighting, Species
@@ -10,6 +12,21 @@ from birddisplay.render.layout import BoardRenderer, _fmt_day, _fmt_when
 from birddisplay.render.palette import Ink
 
 NOW = datetime(2026, 8, 11, 13, 0)
+
+
+@pytest.fixture
+def config(config):
+    """The shipped config, hung the landscape way up.
+
+    BoardRenderer is the photo board, and the photo board is 800x480 by
+    construction: one big picture down the left, a digest column to the
+    right of it. show.py hands a portrait frame to PlateBoardRenderer
+    instead, so this file never sees one, and the geometry asserted below
+    -- the 470..480 gutter, the footer strip at y=440 -- is landscape
+    measured in pixels. Pin the rotation rather than deriving the size,
+    so a change to how the frame hangs cannot quietly reinterpret them.
+    """
+    return replace(config, display=replace(config.display, rotate=0))
 
 
 def make_photo_file(tmp_path, name="bird.jpg") -> str:
