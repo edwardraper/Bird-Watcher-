@@ -101,12 +101,27 @@ class PlateBoardRenderer:
 
         self.margin = 36 if self.portrait else 44
         self.rule_gap = 18
-        self.header = F.load_font("times", 14 if self.portrait else 15)
+        # Bold on the small caps, and nowhere else. Text is drawn straight
+        # into palette indices, so Pillow rasterises it through a 1-bit
+        # mask -- no anti-aliasing, by design, because a grey edge would
+        # have to be dithered and small dithered type is worse than none.
+        # The cost is that any stroke thinner than a whole pixel does not
+        # round up, it disappears. Liberation Serif is a Times face with
+        # real stroke contrast, and at 12-14px its hairlines are about
+        # half a pixel: the caps came out eaten, "domain" reading as
+        # "dcmain". Bold puts the thin strokes back over one pixel.
+        #
+        # The lowercase text is left alone deliberately. It sets at 16-17px
+        # where the hairlines already survive, and bolding a whole species
+        # list would make the quiet board shout -- the restraint is the
+        # design. The credit goes up two points instead of going bold, for
+        # the same reason: a licence line should be legible, not loud.
+        self.header = F.load_font("times_bold", 14 if self.portrait else 15)
         self.scientific = F.load_font("times_italic", 22 if self.portrait else 21)
         self.detail = F.load_font("times", 17)
-        self.label = F.load_font("times", 12)
+        self.label = F.load_font("times_bold", 12)
         self.listing = F.load_font("times", 16 if self.portrait else 17)
-        self.credit = F.load_font("times", 11)
+        self.credit = F.load_font("times", 13)
         self.name_sizes = (56, 48, 42, 36, 30) if self.portrait else (60, 52, 44, 38, 32)
 
     # -- public ----------------------------------------------------------
