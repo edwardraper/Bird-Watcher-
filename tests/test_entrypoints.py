@@ -69,7 +69,8 @@ def test_fetch_writes_a_cache_the_renderer_can_read(config, wired):
     assert fetch_module.run(config) == 0
 
     board = load_board(config.cache.board_path)
-    assert board.region_name == "Devon"
+    # From the shipped config, whatever it currently points at.
+    assert board.region_name == config.region.name
     assert board.headline.species.common_name == "Eurasian Hoopoe"
     assert board.species_count == 11
 

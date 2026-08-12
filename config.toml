@@ -7,11 +7,16 @@
 # Confirm your county code before trusting it:
 #   curl -H "X-eBirdApiToken: $EBIRD_API_KEY" \
 #     https://api.ebird.org/v2/ref/region/list/subnational2/GB-ENG
-code = "GB-ENG-DEV"
-name = "Devon"
-# Centre point for the "recent nearby" query.
-lat = 50.7236
-lng = -3.5275
+# Only the notable/rare query is scoped to this code. Thorpe sits on the
+# east bank of the Dove, right on the county line, so rarities a mile west
+# in Staffordshire (GB-ENG-STS) will not appear as the headline -- they
+# still show up in "also seen nearby", which is radius-based, not regional.
+code = "GB-ENG-DBY"
+# Board header only. Upper-cased and truncated by the renderer.
+name = "Thorpe"
+# Centre point for the "recent nearby" query: Thorpe village, DE6 2BE.
+lat = 53.0501
+lng = -1.7686
 # Kilometres. eBird caps this at 50.
 radius_km = 30
 # Days of history for the recent-nearby query. eBird caps this at 30.
