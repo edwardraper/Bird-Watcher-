@@ -7,17 +7,26 @@
 # Confirm your county code before trusting it:
 #   curl -H "X-eBirdApiToken: $EBIRD_API_KEY" \
 #     https://api.ebird.org/v2/ref/region/list/subnational2/GB-ENG
-code = "GB-ENG-DEV"
-name = "Devon"
-# Centre point for the "recent nearby" query.
-lat = 50.7236
-lng = -3.5275
-# Kilometres. eBird caps this at 50.
+code = "GB-ENG-DBY"
+name = "Derbyshire"
+# Centre point for the "recent nearby" query: Thorpe, above Dovedale.
+# The village sits on the county line -- Ilam and half the dale are
+# Staffordshire. That only shapes the rare-bird headline, which is asked
+# for by region and so stays Derbyshire; the "seen nearby" list is a
+# radius and crosses the border without noticing.
+lat = 53.0525
+lng = -1.7783
+# Kilometres. eBird caps this at 50. Thirty reaches the White Peak,
+# Carsington Water and the Derwent valley.
 radius_km = 30
 # Days of history for the recent-nearby query. eBird caps this at 30.
 back_days = 5
 # Days of history for the notable/rare query.
 notable_back_days = 7
+# Where the display hangs, for the date and times printed on it. The
+# renderer runs on a GitHub runner set to UTC, and eBird reports British
+# local time; without this the board would print one against the other.
+timezone = "Europe/London"
 
 [ebird]
 base_url = "https://api.ebird.org/v2"

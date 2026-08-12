@@ -20,17 +20,44 @@ secrets.py          your wifi and the two URLs (from secrets.example.py)
    as the interpreter, and save `main.py` and your filled-in `secrets.py`
    to the device root.
 
-3. **First run on USB**, with Thonny's console open, so you can watch a
+3. **Bring it up against a laptop first, if you like.** Waiting two hours
+   for a workflow to find out whether the panel draws what you drew is a
+   miserable loop:
+
+   ```bash
+   python -m birddisplay.show --backend inky --preview-path board.png
+   python -m scripts.serve_board      # prints the URLs to paste in secrets.py
+   ```
+
+   Plain HTTP, no GitHub in the way. Put the raw.githubusercontent.com URLs
+   back when it works.
+
+4. **First run on USB**, with Thonny's console open, so you can watch a
    cycle happen and see the log. It will connect, set its clock from NTP,
    download the board and refresh — about a minute in total, most of it the
    panel.
 
-4. **Then move it to battery.** This is not optional if you want the
+5. **Then move it to battery.** This is not optional if you want the
    two-hour schedule: `inky_frame.sleep_for()` wakes the board by cutting
    its power and letting the RTC restore it, and the RTC cannot cut power
    that is coming down the USB cable. On USB the firmware notices it is
    still running and waits out the interval instead, which is fine for a
    bench and wrong for a wall.
+
+## Check the inks before you trust anything
+
+Pimoroni's docs describe the older seven-colour Inky Frame, not the Spectra 6
+board, and the one thing that would ruin every board quietly is a pen order
+that does not match. So draw the palette card first:
+
+```bash
+python -m scripts.palette_card --backend inky --out board.png
+python -m scripts.serve_board
+```
+
+Six labelled swatches. If the one labelled GREEN comes out green, the mapping
+is right and everything else follows. If green and yellow are swapped,
+`INKY_PEN_CODES` in `birddisplay/render/palette.py` is the single line to fix.
 
 ## What it does, and what it costs
 

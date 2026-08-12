@@ -66,7 +66,7 @@ Before the first run, set your region in `config.toml`. Confirm the code rather
 than assuming it:
 
 ```bash
-python -m scripts.find_region --parent GB-ENG --match dev
+python -m scripts.find_region --parent GB-ENG --match derby
 ```
 
 `config.toml` also holds the coordinates and radius for the "recent nearby"
@@ -225,11 +225,17 @@ PicoGraphics pen order, the same job `WIRE_CODES` does for the Waveshare
 panel.
 
 Setup is in [`firmware/inky_frame/README.md`](firmware/inky_frame/README.md).
-To see exactly what the frame will draw:
+To see exactly what the frame will draw, and to serve it from this machine
+while you are setting up rather than waiting on the workflow:
 
 ```bash
 python -m birddisplay.show --backend inky --preview-path board.png
+python -m scripts.serve_board       # prints URLs for the frame's secrets.py
 ```
+
+Draw `scripts/palette_card.py --backend inky` through the same path before
+trusting any of it: it is what confirms pen 2 really is green on a Spectra 6
+panel, which Pimoroni's documentation does not cover.
 
 ## Pi setup
 
@@ -302,7 +308,7 @@ interesting ones:
 ## Development
 
 ```bash
-python -m pytest              # 175 tests, no network, no hardware
+python -m pytest              # 181 tests, no network, no hardware
 ```
 
 The eBird responses in `tests/fixtures/` are hand-built from the real API

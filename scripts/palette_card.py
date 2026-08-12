@@ -7,6 +7,12 @@ the preview PNG changes -- the panel is sent ink indices either way.
 
     python -m scripts.palette_card --out card.png
     python -m scripts.show_image card.png       # on the Pi
+
+On an Inky Frame there is no "on the Pi" -- the card has to travel the same
+road a board does, so write it in pen order and serve it:
+
+    python -m scripts.palette_card --backend inky --out board.png
+    python -m scripts.serve_board                # point secrets.py here
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from birddisplay.config import load_config  # noqa: E402
+from birddisplay.display.inky_export import InkyExportDisplay  # noqa: E402
 from birddisplay.render import fonts as F  # noqa: E402
 from birddisplay.render.palette import Ink, flat_palette, to_rgb  # noqa: E402
 
@@ -81,13 +88,28 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", help="path to config.toml")
     parser.add_argument("--out", default="palette_card.png")
+    parser.add_argument(
+        "--backend",
+        choices=("preview", "inky"),
+        default="preview",
+        help='"inky" writes the card the way a board is written -- '
+        "palette indices in PicoGraphics pen order -- so it can be served "
+        "to an Inky Frame. This is the check that says pen 2 really is "
+        "green on your panel, which Pimoroni's docs do not.",
+    )
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
     card = build_card(config)
     out = Path(args.out)
-    to_rgb(card, config.palette).save(out)
-    print(f"wrote {out.resolve()}")
+
+    if args.backend == "inky":
+        display = InkyExportDisplay(config, path=out)
+        display.headline = "palette card"
+        display.show(card)
+    else:
+        to_rgb(card, config.palette).save(out)
+        print(f"wrote {out.resolve()}")
     return 0
 
 

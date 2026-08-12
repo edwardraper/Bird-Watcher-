@@ -30,7 +30,7 @@ dither noise, and the small type is never dithered at all.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Sequence
 
 from PIL import Image, ImageDraw
@@ -106,13 +106,31 @@ class PlateBoardRenderer:
 
     # -- public ----------------------------------------------------------
 
+    def _local(self, now: datetime | None) -> datetime:
+        """The wall clock where the display hangs.
+
+        The renderer used to run on the same Pi as the panel, so the system
+        clock was already right. It now also runs on a GitHub runner set to
+        UTC, while eBird reports British local time -- printing one over the
+        other is how a board ends up dated yesterday. An aware time handed
+        in is converted rather than trusted; a naive one is left alone,
+        because the only thing that passes naive times is a machine whose
+        clock is already local.
+        """
+        zone = self.config.region.tzinfo
+        if now is None:
+            return datetime.now(zone or timezone.utc)
+        if now.tzinfo is not None and zone is not None:
+            return now.astimezone(zone)
+        return now
+
     def render(
         self,
         board: Board,
         plate: Image.Image | None,
         now: datetime | None = None,
     ) -> Image.Image:
-        now = now or datetime.now()
+        now = self._local(now)
         canvas = new_canvas(self.width, self.height, self.config.palette)
         draw = ImageDraw.Draw(canvas)
 

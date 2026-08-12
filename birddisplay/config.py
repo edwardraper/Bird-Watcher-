@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import tomllib
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,24 @@ class RegionConfig:
     radius_km: int
     back_days: int
     notable_back_days: int
+    timezone: str = "Europe/London"
+
+    @property
+    def tzinfo(self) -> ZoneInfo | None:
+        """Where the display hangs, for anything it prints.
+
+        The renderer used to run on the same Pi as the panel, where the
+        system clock was already local. It now runs on a GitHub runner set
+        to UTC, while eBird reports sightings in British local time -- so
+        without this the board would print a UTC date over local times,
+        and for an hour around midnight in summer, the wrong date.
+        """
+        try:
+            return ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            # A missing tz database is not worth a blank wall; fall back
+            # to the system clock, which on the Pi is right anyway.
+            return None
 
 
 @dataclass(frozen=True)
@@ -235,6 +254,7 @@ def load_config(path: Path | str | None = None) -> Config:
         radius_km=int(region_raw.get("radius_km", 25)),
         back_days=int(region_raw.get("back_days", 5)),
         notable_back_days=int(region_raw.get("notable_back_days", 7)),
+        timezone=str(region_raw.get("timezone", "Europe/London")),
     )
     # eBird enforces these server-side; failing here gives a better message
     # than a 400 from the API at 06:50 on a Sunday.
