@@ -3,15 +3,19 @@
  "searched_through_rank": 150,
  "counts": {
   "species": 200,
-  "with_plate": 105,
+  "with_plate": 101,
   "searched_no_plate": 37,
-  "excluded": 8,
+  "excluded": 12,
   "not_yet_searched": 50
  },
  "commonest_gaps": [
   {
    "rank": 6,
    "common_name": "Carrion Crow"
+  },
+  {
+   "rank": 15,
+   "common_name": "Herring Gull"
   },
   {
    "rank": 16,
@@ -24,6 +28,10 @@
   {
    "rank": 23,
    "common_name": "Collared Dove"
+  },
+  {
+   "rank": 24,
+   "common_name": "Mute Swan"
   },
   {
    "rank": 25,
@@ -235,6 +243,21 @@
  ],
  "excluded": [
   {
+   "rank": 15,
+   "common_name": "Herring Gull",
+   "scientific_name": "Larus argentatus",
+   "refused": [
+    {
+     "file": "Coloured figures of the birds of the British Islands - issued by Lord Lilford (Plate XXIII) (20132195059).jpg",
+     "reason": "The gull is preening, head buried in its wing, so the one thing that says gull -- the bill and the eye -- is upside down inside the feathers. Pale grey bird on pale sand, three more birds behind it, and a wide scene at that: at 480px it is a grey shape on a yellow beach."
+    },
+    {
+     "work": "Coloured figures of the birds of the British Islands",
+     "reason": "Lilford's herring gull is the preening bird with its head inside its wing, and Commons holds scan after scan of that one plate, so excluding a file just hands over the next copy. Nothing else in Lilford shows the bird, and a headless grey shape on a yellow beach is not worth a plate."
+    }
+   ]
+  },
+  {
    "rank": 16,
    "common_name": "Black-headed Gull",
    "scientific_name": "Chroicocephalus ridibundus",
@@ -246,6 +269,25 @@
    ]
   },
   {
+   "rank": 24,
+   "common_name": "Mute Swan",
+   "scientific_name": "Cygnus olor",
+   "refused": [
+    {
+     "file": "Cygnus olor 1873.jpg",
+     "reason": "A landscape with a swan in it. Reeds, a far bank, a wide band of water, and the swan white on the white of the water with only its bill to say which end is the front. The board wants a bird; this is a view."
+    },
+    {
+     "file": "Keulemans Onze vogels 2 66.jpg",
+     "reason": "What replaced the swan-in-a-landscape, and worse: the swan swims white against white water, the cutout finds no edge between them and walks up the neck, and the board gets a white shape with no head on it and the reeds still attached."
+    },
+    {
+     "work": "Coloured figures of the birds of the British Islands",
+     "reason": "Lilford's swan swims with two cygnets, and white on white water is the one thing this panel cannot print: the whole bird arrives as a single pale oval with an orange bill floating in the middle of it and no line anywhere to say where the swan stops and the lake starts. Onze vogels had already failed the same way, with the cutout taking the head off. Refused as a work because Commons holds several scans of the one Lilford plate."
+    }
+   ]
+  },
+  {
    "rank": 66,
    "common_name": "Tawny Owl",
    "scientific_name": "Strix aluco",
@@ -253,6 +295,32 @@
     {
      "file": "CBBM02 249.png",
      "reason": "A study of a tawny owl's talons -- four claws on a blank page. Right artist, right bird, and nothing in the filename to say so."
+    }
+   ]
+  },
+  {
+   "rank": 85,
+   "common_name": "Willow Tit",
+   "scientific_name": "Poecile montanus",
+   "refused": [
+    {
+     "file": "Poecile montanus songarus & Poecile montanus affinis & Poecile superciliosus 1889.jpg",
+     "reason": "The third of the 1889 pages, and the same shape: five birds, three named taxa, two of them races of willow tit from central Asia and the third a white-browed tit. A page from a monograph, not a portrait."
+    },
+    {
+     "work": "Nauchnye rezulʹtaty puteshestvyǐ N.M. Przhevalʹskago po t͡sentralʹnoǐ Azii",
+     "reason": "And the same again: songarus, the Songar tit, rusty-flanked and drawn with the next bird on the plate clipped in under its feet."
+    }
+   ]
+  },
+  {
+   "rank": 91,
+   "common_name": "Little Egret",
+   "scientific_name": "Egretta garzetta",
+   "refused": [
+    {
+     "file": "Coloured figures of the birds of the British Islands - issued by Lord Lilford (20728475732).jpg",
+     "reason": "A white bird in front of dead reeds. On paper the egret is a beautiful cloud of plumes; at six inks the plumes and the reeds dither into the same speckle and the bird disappears into the bed it is standing in."
     }
    ]
   },
