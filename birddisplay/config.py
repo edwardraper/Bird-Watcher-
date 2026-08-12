@@ -29,6 +29,14 @@ class RegionConfig:
     radius_km: int
     back_days: int
     notable_back_days: int
+    # Ask for rare birds by radius rather than by county. The two eBird
+    # queries behind the board answer different questions: "seen nearby"
+    # is a circle around lat/lng, while the rare-bird feed is a whole
+    # administrative region -- and Derbyshire is about ninety kilometres
+    # top to bottom, so a county query can headline the board with a bird
+    # seen sixty kilometres away. True asks the geo endpoint instead, so
+    # both halves of the board mean the same thing by "near".
+    notable_within_radius: bool = True
     timezone: str = "Europe/London"
 
     @property
@@ -271,6 +279,7 @@ def load_config(path: Path | str | None = None) -> Config:
         radius_km=int(region_raw.get("radius_km", 25)),
         back_days=int(region_raw.get("back_days", 5)),
         notable_back_days=int(region_raw.get("notable_back_days", 7)),
+        notable_within_radius=bool(region_raw.get("notable_within_radius", True)),
         timezone=str(region_raw.get("timezone", "Europe/London")),
     )
     # eBird enforces these server-side; failing here gives a better message

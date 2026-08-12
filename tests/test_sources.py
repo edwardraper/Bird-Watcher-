@@ -154,7 +154,58 @@ def test_british_common_names_are_requested(config, monkeypatch):
     EbirdClient(config, http).notable()
     assert session.requests[0]["params"]["sppLocale"] == "en_UK"
     assert session.requests[0]["params"]["detail"] == "full"
-    assert config.region.code in session.requests[0]["url"]
+
+
+def test_rare_birds_are_asked_for_by_radius(config, monkeypatch):
+    """Both halves of the board must mean the same thing by "near".
+
+    The seen-nearby list is a circle around lat/lng. Asking for rare
+    birds by county instead lets a bird ninety kilometres up the Dark
+    Peak headline a board about Thorpe.
+    """
+    monkeypatch.setenv(config.ebird.api_key_env, "k")
+    http, session = client_for(config, [FakeResponse(200, payload=[])])
+    EbirdClient(config, http).notable()
+
+    request = session.requests[0]
+    assert request["url"].endswith("/data/obs/geo/recent/notable")
+    assert config.region.code not in request["url"]
+    assert request["params"]["lat"] == config.region.lat
+    assert request["params"]["lng"] == config.region.lng
+    assert request["params"]["dist"] == config.region.radius_km
+
+
+def test_the_county_wide_query_is_still_available(config, monkeypatch):
+    """Turned off, the old behaviour is exactly the old behaviour."""
+    from dataclasses import replace
+
+    monkeypatch.setenv(config.ebird.api_key_env, "k")
+    county = replace(
+        config, region=replace(config.region, notable_within_radius=False)
+    )
+    http, session = client_for(county, [FakeResponse(200, payload=[])])
+    EbirdClient(county, http).notable()
+
+    request = session.requests[0]
+    assert county.region.code in request["url"]
+    assert "lat" not in request["params"]
+
+
+def test_an_explicit_region_code_overrides_the_radius(config, monkeypatch):
+    monkeypatch.setenv(config.ebird.api_key_env, "k")
+    http, session = client_for(config, [FakeResponse(200, payload=[])])
+    EbirdClient(config, http).notable(region_code="GB-ENG-STS")
+    assert "GB-ENG-STS" in session.requests[0]["url"]
+
+
+def test_the_radius_is_capped_for_rare_birds_too(config, monkeypatch):
+    from dataclasses import replace
+
+    monkeypatch.setenv(config.ebird.api_key_env, "k")
+    wide = replace(config, region=replace(config.region, radius_km=500))
+    http, session = client_for(wide, [FakeResponse(200, payload=[])])
+    EbirdClient(wide, http).notable()
+    assert session.requests[0]["params"]["dist"] == 50
 
 
 # -- taxonomy ------------------------------------------------------------

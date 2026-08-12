@@ -36,6 +36,10 @@ DEFAULT_DB = Path(__file__).resolve().parent.parent / "assets" / "plates" / "keu
 
 # Sample sightings: real places on the Exe estuary, invented observations.
 SAMPLE_LOCATION = "Bowling Green Marsh RSPB"
+SAMPLE_DESCRIPTION = (
+    "A common and widespread thrush of gardens, woodland and hedgerows. "
+    "The male is uniformly black with a yellow eye-ring and bill."
+)
 SAMPLE_ALSO_SEEN: tuple[tuple[str, str, str], ...] = (
     ("whimbr", "Whimbrel", "Numenius phaeopus"),
     ("comgre1", "Greenshank", "Tringa nebularia"),
@@ -93,6 +97,10 @@ def sample_board(store: PlateStore, code: str, region_name: str) -> Board:
         ),
         also_seen=also_seen,
         species_count=len(also_seen) + 1,
+        # Invented, like the sightings around it, and about as long as a
+        # real Wikipedia extract trimmed to whole sentences -- which is
+        # the length worth judging the layout against.
+        headline_description=SAMPLE_DESCRIPTION,
     )
 
 
