@@ -450,3 +450,28 @@ def test_the_setting_is_off_unless_secrets_says_otherwise(frame) -> None:
     frame.responses["manifest"]["sha256"] = "abc"
     frame.main.cycle()
     assert frame.drawn == []
+
+
+def test_a_clock_set_to_the_future_is_corrected(frame, monkeypatch) -> None:
+    """The real frame came up believing it was 2082.
+
+    A test that only looked downwards -- "is the year before 2024?" --
+    saw 2082, decided the clock had been set, and never asked NTP. The
+    24-hour refresh rule is computed from that clock, so a wrong one
+    makes it meaningless in a way nothing reports.
+    """
+    monkeypatch.setattr(
+        frame.main.time, "localtime", lambda *a: (2082, 1, 1, 8, 11, 52, 0, 1)
+    )
+    frame.main.cycle()
+    assert frame.inky.clock_set == 1, "an implausible year must be corrected"
+
+
+def test_a_plausible_clock_is_left_alone(frame, monkeypatch) -> None:
+    """NTP on every wake would be a needless round trip on a board whose
+    whole point is a few seconds of radio."""
+    monkeypatch.setattr(
+        frame.main.time, "localtime", lambda *a: (2026, 8, 16, 20, 0, 0, 5, 228)
+    )
+    frame.main.cycle()
+    assert frame.inky.clock_set == 0

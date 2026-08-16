@@ -76,6 +76,12 @@ FORCE_REFRESH_HOURS = 24
 ALWAYS_REDRAW = False
 
 WIFI_TIMEOUT_SECONDS = 30
+
+# What counts as a believable clock. Below this the RTC has never been
+# set; above it, it has been set to nonsense. Both mean the same thing --
+# ask NTP -- and only the lower bound used to be checked.
+MIN_YEAR = 2024
+MAX_YEAR = 2075
 CHUNK = 1024
 
 # The Pico's own flash, not the SD card. The board is tens of kilobytes and
@@ -311,9 +317,14 @@ def cycle():
             raise OSError("no network")
 
         # A clock that has never been set makes the 24-hour rule
-        # meaningless, and the log unreadable.
-        if time.localtime()[0] < 2024:
-            log("setting the clock from NTP")
+        # meaningless and the log unreadable. An unset RTC does not
+        # always read as 2000: the real frame came up believing it was
+        # 2082, sailed past a "has it been set yet" test that only looked
+        # downwards, and never asked NTP at all. A clock can be wrong in
+        # either direction, so the test is whether it is plausible.
+        year = time.localtime()[0]
+        if not (MIN_YEAR <= year <= MAX_YEAR):
+            log("clock says %d; setting it from NTP" % year)
             inky_frame.set_time()
 
         manifest = get_json(secrets.MANIFEST_URL)
