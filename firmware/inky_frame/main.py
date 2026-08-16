@@ -117,16 +117,49 @@ IMAGE_PATH = "/board.png"
 PART_PATH = "/board.png.part"
 STATE_PATH = "/last.json"
 
+# The log, kept on flash so unattended cycles can be read back later.
+# Two files rather than one: rotating rather than truncating means a
+# fault is never lost to the rotation that happened just after it.
+LOG_PATH = "/log.txt"
+LOG_PREVIOUS_PATH = "/log.old.txt"
+LOG_MAX_BYTES = 8192
+
 
 def log(message):
     # Indexed rather than unpacked: MicroPython's localtime() gives eight
     # fields and CPython's gives nine, and this file is exercised by the
     # test suite on a laptop as well as running on the board.
     now = time.localtime()
-    print(
-        "%04d-%02d-%02d %02d:%02d:%02d  %s"
-        % (now[0], now[1], now[2], now[3], now[4], now[5], message)
+    line = "%04d-%02d-%02d %02d:%02d:%02d  %s" % (
+        now[0], now[1], now[2], now[3], now[4], now[5], message,
     )
+    print(line)
+    _append_to_log(line)
+
+
+def _append_to_log(line):
+    """Keep the log on flash, because the interesting cycles are unwatched.
+
+    sleep_for() cuts the board's power, which drops the USB serial link,
+    so a console can only ever watch a cycle run by hand -- and a fault
+    that appears only when the frame runs on its own is then invisible by
+    construction. Every log we had of this display came from the one case
+    that worked.
+
+    Written to flash it survives the power cut, and the next time anyone
+    plugs in they can read what the unattended cycles actually did.
+    """
+    try:
+        try:
+            if os.stat(LOG_PATH)[6] > LOG_MAX_BYTES:
+                os.rename(LOG_PATH, LOG_PREVIOUS_PATH)
+        except OSError:
+            pass
+        with open(LOG_PATH, "a") as handle:
+            handle.write(line + "\n")
+    except OSError:
+        # A log that cannot be written must never take the board down.
+        pass
 
 
 # -- state ------------------------------------------------------------

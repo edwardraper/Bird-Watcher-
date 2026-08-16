@@ -207,10 +207,15 @@ def frame(tmp_path: Path, monkeypatch):
     module.PANEL_SETTLE_SECONDS = 0
     module.CLEAR_SETTLE_SECONDS = 0
 
-    # Keep the device's writes inside tmp_path.
+    # Keep the device's writes inside tmp_path. The paths are absolute on
+    # the frame, where "/" is its own flash -- on a laptop they are the
+    # root of somebody's actual disk, so every one of them has to be
+    # redirected here or the suite writes to the machine running it.
     module.IMAGE_PATH = str(tmp_path / "board.png")
     module.PART_PATH = str(tmp_path / "board.png.part")
     module.STATE_PATH = str(tmp_path / "last.json")
+    module.LOG_PATH = str(tmp_path / "log.txt")
+    module.LOG_PREVIOUS_PATH = str(tmp_path / "log.old.txt")
 
     return types.SimpleNamespace(
         main=module,
@@ -540,3 +545,36 @@ def test_clearing_can_be_turned_off(frame) -> None:
 
     assert "clear" not in frame.drawn
     assert frame.drawn.count("update") == 1
+
+
+def test_the_log_survives_on_flash(frame) -> None:
+    """The cycles worth reading are the ones nobody is watching.
+
+    sleep_for() cuts the board's power and takes the USB serial link with
+    it, so a console can only ever see a cycle run by hand -- and this
+    display's fault appeared only when it ran on its own. Every log there
+    was came from the one case that worked.
+    """
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+
+    written = Path(frame.main.LOG_PATH).read_text()
+    assert "refreshing the panel" in written
+    assert "showing:" in written
+
+
+def test_the_log_is_rotated_rather_than_truncated(frame) -> None:
+    """Truncating would lose a fault to the rotation just after it."""
+    Path(frame.main.LOG_PATH).write_text("x" * (frame.main.LOG_MAX_BYTES + 1))
+    frame.main.log("after the rotation")
+
+    assert Path(frame.main.LOG_PREVIOUS_PATH).exists(), "the old log was thrown away"
+    assert "after the rotation" in Path(frame.main.LOG_PATH).read_text()
+
+
+def test_an_unwritable_log_never_takes_the_board_down(frame) -> None:
+    """A wall display must not fail because it could not write a note
+    about failing."""
+    frame.main.LOG_PATH = "/nonexistent-directory/log.txt"
+    frame.main.LOG_PREVIOUS_PATH = "/nonexistent-directory/log.old.txt"
+    frame.main.log("this must not raise")
