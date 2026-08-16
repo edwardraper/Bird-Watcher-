@@ -192,6 +192,8 @@ def frame(tmp_path: Path, monkeypatch):
     # branch now actually reachable the default 30s would be spent, twice
     # over, waiting for a fake radio to fail.
     module.WIFI_TIMEOUT_SECONDS = 0
+    # Nor is any test about how long the panel is left to settle.
+    module.PANEL_SETTLE_SECONDS = 0
 
     # Keep the device's writes inside tmp_path.
     module.IMAGE_PATH = str(tmp_path / "board.png")
@@ -475,3 +477,21 @@ def test_a_plausible_clock_is_left_alone(frame, monkeypatch) -> None:
     )
     frame.main.cycle()
     assert frame.inky.clock_set == 0
+
+
+def test_the_panel_is_left_to_settle_before_the_power_can_be_cut(frame) -> None:
+    """update() returns when the waveform has been sent, and the next
+    thing this firmware does is switch the board off at the RTC. Pull the
+    supply before the particles have come to rest and the image never
+    sets -- which reads, from across the room, as a refresh that
+    completed and drew nothing.
+    """
+    slept: list = []
+    frame.main.time.sleep = lambda seconds: slept.append(seconds)
+
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+
+    assert frame.main.PANEL_SETTLE_SECONDS in slept, (
+        "nothing waited for the panel between update() and sleep_for()"
+    )
