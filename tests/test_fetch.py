@@ -168,7 +168,13 @@ def test_the_image_fallback_gives_up_rather_than_hammering_wikimedia(
             raise ImageUnavailable("no image")
 
     build_board(config, taxonomy, notable_raw, recent_raw, NothingWorks(), featured=[])
-    assert len(attempts) == MAX_IMAGE_ATTEMPTS
+    # Two bounded loops, not one: the headline tries a few species before
+    # settling for a text-only board, and each of the other sightings is
+    # tried once for a board of its own. Neither walks the whole list, and
+    # the ceiling is what this test is really about -- a fetch that cannot
+    # find a picture must not turn into a hundred Wikimedia calls.
+    ceiling = MAX_IMAGE_ATTEMPTS + config.board.also_seen_count
+    assert len(attempts) <= ceiling
 
 
 def test_no_image_anywhere_still_yields_a_board(

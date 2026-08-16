@@ -149,6 +149,38 @@ class Photo:
         )
 
 
+@dataclass(frozen=True)
+class Feature:
+    """A bird the board can be built around.
+
+    The headline is one of these in all but name -- the same sighting,
+    picture and sentence, kept as three fields on Board for the sake of
+    every cache written before there was more than one. An alternate is
+    the same thing for a bird further down the list, resolved at fetch
+    time so the renderer can swap it in and draw an entire board about it.
+    """
+
+    sighting: Sighting
+    photo: Photo | None = None
+    description: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sighting": self.sighting.to_dict(),
+            "photo": self.photo.to_dict() if self.photo else None,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Feature":
+        photo = data.get("photo")
+        return cls(
+            sighting=Sighting.from_dict(data["sighting"]),
+            photo=Photo.from_dict(photo) if photo else None,
+            description=data.get("description", ""),
+        )
+
+
 @dataclass
 class Board:
     """Everything the renderer needs for one refresh. This is the cache."""
@@ -158,6 +190,12 @@ class Board:
     headline: Sighting | None = None
     headline_photo: Photo | None = None
     also_seen: list[Sighting] = field(default_factory=list)
+    # The other sightings, resolved far enough to be drawn: a picture and
+    # a sentence each, not just a name. The frame cannot render anything,
+    # so a board it can show has to exist as a PNG before it asks -- these
+    # are what the workflow turns into board-1.png and its siblings for
+    # the buttons to page through.
+    alternates: list[Feature] = field(default_factory=list)
     species_count: int = 0
     checklist_note: str = ""
     # A sentence or two about the headline bird, taken from Wikipedia at
@@ -187,6 +225,7 @@ class Board:
                 self.headline_photo.to_dict() if self.headline_photo else None
             ),
             "also_seen": [s.to_dict() for s in self.also_seen],
+            "alternates": [a.to_dict() for a in self.alternates],
             "species_count": self.species_count,
             "checklist_note": self.checklist_note,
             "headline_description": self.headline_description,
@@ -207,6 +246,8 @@ class Board:
             headline=Sighting.from_dict(headline) if headline else None,
             headline_photo=Photo.from_dict(photo) if photo else None,
             also_seen=[Sighting.from_dict(s) for s in data.get("also_seen", [])],
+            # Absent from caches written before the buttons could page.
+            alternates=[Feature.from_dict(a) for a in data.get("alternates", [])],
             species_count=int(data.get("species_count", 0)),
             checklist_note=data.get("checklist_note", ""),
             # Absent from caches written before the description existed,

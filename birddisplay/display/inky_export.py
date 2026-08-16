@@ -49,6 +49,12 @@ class InkyExportDisplay:
         self.height = config.display.height
         self.path = Path(path or config.display.export_path).expanduser()
         self.headline = ""
+        # One entry per extra board written, in the order the buttons
+        # page through them. Rewritten into the manifest as each is
+        # added, so a run cut short leaves a manifest describing only the
+        # boards that actually exist on disk.
+        self.alternates: list[dict[str, object]] = []
+        self._digest, self._size = "", 0
 
     @property
     def manifest_path(self) -> Path:
@@ -76,36 +82,75 @@ class InkyExportDisplay:
                 f"board is {image.size}, frame expects "
                 f"{self.config.display.board_size}"
             )
-        image = self._to_panel(image)
-
-        exported = to_inky_png(image, self.config.palette)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Written to a temp file and moved into place: the workflow may be
-        # publishing the previous one, and a half-written PNG is a frame
-        # that fails to decode and leaves a stale board up for two hours.
-        tmp = self.path.with_suffix(self.path.suffix + ".part")
-        try:
-            # No optimize=True. Pillow is entitled to drop unused palette
-            # entries and renumber the rest, and the indices are the whole
-            # payload -- see render.palette.to_inky_png.
-            exported.save(tmp, format="PNG", compress_level=9)
-            payload = tmp.read_bytes()
-            tmp.replace(self.path)
-        finally:
-            tmp.unlink(missing_ok=True)
-
+        payload = self._write_image(image, self.path)
         digest = hashlib.sha256(payload).hexdigest()
         self._write_manifest(digest, len(payload))
         log.info(
             "wrote %s (%.1f kB, sha %s)", self.path, len(payload) / 1024, digest[:12]
         )
 
+    def _write_image(self, image: Image.Image, path: Path) -> bytes:
+        """Turn a composed board and put it on disk, atomically.
+
+        Written to a temp file and moved into place: the workflow may be
+        publishing the previous one, and a half-written PNG is a frame
+        that fails to decode and leaves a stale board up for two hours.
+        """
+        image = self._to_panel(image)
+        exported = to_inky_png(image, self.config.palette)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        tmp = path.with_suffix(path.suffix + ".part")
+        try:
+            # No optimize=True. Pillow is entitled to drop unused palette
+            # entries and renumber the rest, and the indices are the whole
+            # payload -- see render.palette.to_inky_png.
+            exported.save(tmp, format="PNG", compress_level=9)
+            payload = tmp.read_bytes()
+            tmp.replace(path)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return payload
+
+    def alternate_path(self, index: int) -> Path:
+        """board.png -> board-1.png, board-2.png, and so on."""
+        return self.path.with_name(
+            "%s-%d%s" % (self.path.stem, index, self.path.suffix)
+        )
+
+    def show_alternate(self, image: Image.Image, headline: str = "") -> None:
+        """Write one more board, for a button to page to.
+
+        Same file format and the same refusal to be re-quantised as the
+        main board -- these are boards in every sense, just not the one
+        the frame shows when it wakes on its own.
+        """
+        index = len(self.alternates) + 1
+        path = self.alternate_path(index)
+        payload = self._write_image(image, path)
+        self.alternates.append(
+            {
+                "image": path.name,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "bytes": len(payload),
+                "headline": headline,
+            }
+        )
+        # Rewritten now rather than at the end: the manifest must never
+        # promise a board that is not on disk yet, because the frame
+        # believes it.
+        self._write_manifest(self._digest, self._size)
+        log.info("wrote %s (%.1f kB, %s)", path, len(payload) / 1024, headline)
+
     def _write_manifest(self, digest: str, size: int) -> None:
+        self._digest, self._size = digest, size
         manifest = {
             "schema_version": SCHEMA_VERSION,
             "sha256": digest,
             "bytes": size,
+            # Empty for a board with nothing else worth showing, which is
+            # what a frame with an older manifest also sees.
+            "alternates": self.alternates,
             "width": self.width,
             "height": self.height,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

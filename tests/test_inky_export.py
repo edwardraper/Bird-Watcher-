@@ -224,3 +224,93 @@ def test_a_wrong_sized_board_is_refused(config: Config, tmp_path: Path) -> None:
 def test_only_palettised_boards_can_be_exported(config: Config) -> None:
     with pytest.raises(ValueError, match="palettised"):
         to_inky_png(Image.new("RGB", (10, 10)), config.palette)
+
+
+# -- alternate boards, for the buttons to page through -------------------
+
+
+def test_alternates_are_written_beside_the_board(
+    config: Config, board_image, tmp_path: Path
+) -> None:
+    display = InkyExportDisplay(config, path=tmp_path / "board.png")
+    display.headline = "Blackbird"
+    display.show(board_image)
+    display.show_alternate(board_image, "Wren")
+    display.show_alternate(board_image, "Robin")
+
+    assert (tmp_path / "board-1.png").exists()
+    assert (tmp_path / "board-2.png").exists()
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "board-1.png",
+        "board-2.png",
+        "board.json",
+        "board.png",
+    ]
+
+
+def test_the_manifest_lists_every_alternate(
+    config: Config, board_image, tmp_path: Path
+) -> None:
+    """The frame believes this list, so it must describe files that exist."""
+    display = InkyExportDisplay(config, path=tmp_path / "board.png")
+    display.headline = "Blackbird"
+    display.show(board_image)
+    display.show_alternate(board_image, "Wren")
+
+    manifest = json.loads(display.manifest_path.read_text())
+    assert manifest["headline"] == "Blackbird"
+    assert len(manifest["alternates"]) == 1
+
+    entry = manifest["alternates"][0]
+    written = (tmp_path / entry["image"]).read_bytes()
+    assert entry["headline"] == "Wren"
+    assert entry["bytes"] == len(written)
+    assert entry["sha256"] == hashlib.sha256(written).hexdigest()
+
+
+def test_the_manifest_never_promises_a_board_that_is_not_there_yet(
+    config: Config, board_image, tmp_path: Path
+) -> None:
+    """Rewritten after each alternate, not once at the end.
+
+    A run cut off halfway must leave a manifest describing only what is
+    on disk -- the frame will happily download a board that was never
+    written and show whatever it decodes.
+    """
+    display = InkyExportDisplay(config, path=tmp_path / "board.png")
+    display.show(board_image)
+    assert json.loads(display.manifest_path.read_text())["alternates"] == []
+
+    display.show_alternate(board_image, "Wren")
+    listed = json.loads(display.manifest_path.read_text())["alternates"]
+    assert len(listed) == 1
+    assert (tmp_path / listed[0]["image"]).exists()
+
+
+def test_the_main_board_keeps_its_own_sha_when_alternates_are_added(
+    config: Config, board_image, tmp_path: Path
+) -> None:
+    """The frame skips its two-hourly download by comparing this. Writing
+    an alternate must not disturb it, or every frame redraws for nothing."""
+    display = InkyExportDisplay(config, path=tmp_path / "board.png")
+    display.show(board_image)
+    before = json.loads(display.manifest_path.read_text())
+
+    display.show_alternate(board_image, "Wren")
+    after = json.loads(display.manifest_path.read_text())
+
+    assert after["sha256"] == before["sha256"]
+    assert after["bytes"] == before["bytes"]
+
+
+def test_an_alternate_is_not_re_dithered_either(
+    config: Config, board_image, tmp_path: Path
+) -> None:
+    display = InkyExportDisplay(config, path=tmp_path / "board.png")
+    display.show(board_image)
+    display.show_alternate(board_image, "Wren")
+
+    expected = to_inky_png(display._to_panel(board_image), config.palette)
+    with Image.open(tmp_path / "board-1.png") as reopened:
+        assert reopened.mode == "P"
+        assert reopened.tobytes() == expected.tobytes()

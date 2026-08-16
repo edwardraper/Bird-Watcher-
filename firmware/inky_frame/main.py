@@ -59,6 +59,22 @@ MAX_RETRIES = 3
 # advice for keeping ghosting out of a panel that sits still for days.
 FORCE_REFRESH_HOURS = 24
 
+# Redraw on every wake, even when the board has not changed.
+#
+# Off by default because the sha comparison is what makes a battery
+# display worth having: a quiet cycle is a few seconds of radio, and a
+# drawing cycle is thirty seconds of panel at the highest current the
+# board ever draws. On costs materially more battery -- still months
+# rather than days, but fewer months.
+#
+# Worth turning on if you would rather the wall be certainly right than
+# certainly efficient. It makes the panel's contents follow from the last
+# wake rather than from a record of what was drawn hours ago, which no
+# amount of bookkeeping can fully guarantee: the frame cannot see its own
+# glass. Set ALWAYS_REDRAW = True in secrets.py to enable it without
+# editing this file.
+ALWAYS_REDRAW = False
+
 WIFI_TIMEOUT_SECONDS = 30
 CHUNK = 1024
 
@@ -304,7 +320,26 @@ def cycle():
         published = manifest.get("sha256", "")
         stale = hours_since(state.get("refreshed_at", 0)) >= FORCE_REFRESH_HOURS
 
-        if published and published == state.get("sha256") and not stale and not forced:
+        # A refresh that began and never reported finishing. The panel is
+        # then whatever thirty seconds of interrupted waveform left behind
+        # -- usually blank -- and no sha describes it, so the only honest
+        # thing is to draw again.
+        interrupted = bool(state.get("drawing"))
+        if interrupted:
+            log("last refresh did not finish; drawing again")
+
+        always = getattr(secrets, "ALWAYS_REDRAW", ALWAYS_REDRAW)
+        if always:
+            log("ALWAYS_REDRAW is on; drawing whatever the sha says")
+
+        if (
+            published
+            and published == state.get("sha256")
+            and not stale
+            and not forced
+            and not interrupted
+            and not always
+        ):
             log("board unchanged (%s); leaving the panel alone" % published[:12])
             state["failures"] = 0
             write_state(state)
@@ -317,8 +352,19 @@ def cycle():
         disconnect_wifi(wlan)
         wlan = None
 
+        # Written before the panel is touched, cleared after. The frame
+        # cannot look at its own glass, so this is the only way it can
+        # ever know that a refresh started and did not come back: the
+        # thirty seconds of a Spectra 6 update are the likeliest moment
+        # for a battery to sag or a cable to be pulled, and what that
+        # leaves on the wall is a blank board that matches no sha at all.
+        state["drawing"] = published
+        write_state(state)
+
         draw(IMAGE_PATH)
+
         state["sha256"] = published
+        state["drawing"] = ""
         state["refreshed_at"] = time.time()
         state["failures"] = 0
         write_state(state)

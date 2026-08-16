@@ -19,3 +19,13 @@ WIFI_PASSWORD = "your-password"
 # when the manifest says the sha has changed.
 MANIFEST_URL = "https://raw.githubusercontent.com/edwardraper/Bird-Watcher-/board/board.json"
 BOARD_URL = "https://raw.githubusercontent.com/edwardraper/Bird-Watcher-/board/board.png"
+
+# Optional. Redraw the panel on every wake, even when the board has not
+# changed. Off by default: the sha comparison is what makes a battery
+# display worth having, since a quiet cycle is a few seconds of radio and
+# a drawing cycle is thirty seconds of panel at peak current.
+#
+# Turn it on if you would rather the wall be certainly right than
+# certainly efficient -- the frame cannot see its own glass, so no record
+# of what it drew is ever quite proof.
+# ALWAYS_REDRAW = True
