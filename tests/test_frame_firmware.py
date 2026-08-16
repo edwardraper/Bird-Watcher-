@@ -84,6 +84,9 @@ class FakeNetwork:
     def __init__(self, connected: bool = True) -> None:
         self.connected = connected
         self.status_code = -2
+        # What the radio can see, as raw bytes -- the point being that a
+        # name may not be spelled the way anyone thinks it is.
+        self.visible: list[bytes] = [b"net"]
 
     def WLAN(self, _interface: int):  # noqa: N802 - matching MicroPython
         outer = self
@@ -97,6 +100,9 @@ class FakeNetwork:
 
             def connect(self, _ssid: str, _password: str) -> None:
                 pass
+
+            def scan(self):
+                return [(name, b"\x00" * 6, 4, -50, 5, False) for name in outer.visible]
 
             def status(self) -> int:
                 # MicroPython reports why a join failed; -2 is "no access
@@ -307,3 +313,58 @@ def test_an_unknown_status_still_reports_the_number(frame, capsys) -> None:
     frame.net.status_code = 99
     frame.main.cycle()
     assert "status 99" in capsys.readouterr().out
+
+
+def test_a_trailing_space_in_the_network_name_is_recovered(frame, capsys) -> None:
+    """The name in secrets.py is what a person can see; the broadcast
+    name is what the radio hears, and they are not always the same.
+
+    A real network called "Thorpe Grange " reads as "Thorpe Grange" in
+    the router's app, in the wifi menu and in the join dialog. Nothing
+    renders the space, so nothing can be blamed for it -- the frame just
+    reports, correctly, that no such network exists.
+    """
+    frame.net.connected = False
+    frame.net.visible = [b"Thorpe Grange "]
+    frame.main.secrets.WIFI_SSID = "Thorpe Grange"
+
+    joined: list = []
+
+    def fake_join(wlan, ssid, password):
+        joined.append(ssid)
+        # The exact name fails; the bytes off the air succeed.
+        connected = isinstance(ssid, bytes)
+        frame.net.connected = connected
+        return connected
+
+    frame.main.join = fake_join
+    assert frame.main.connect_wifi() is not None
+    assert joined == ["Thorpe Grange", b"Thorpe Grange "]
+    assert "not what it looks like" in capsys.readouterr().out
+
+
+def test_a_network_that_is_simply_absent_still_fails(frame) -> None:
+    """The whitespace rescue must not turn a missing network into a
+    different one that happens to be nearby."""
+    frame.net.connected = False
+    frame.net.visible = [b"Somebody Else"]
+    frame.main.secrets.WIFI_SSID = "Thorpe Grange"
+    assert frame.main.connect_wifi() is None
+
+
+def test_the_rescue_only_matches_on_whitespace(frame) -> None:
+    from_air = frame.main.matching_ssid
+
+    class Radio:
+        def __init__(self, names):
+            self.names = names
+
+        def scan(self):
+            return [(n, b"", 4, -50, 5, False) for n in self.names]
+
+    assert from_air(Radio([b"Thorpe Grange "]), "Thorpe Grange") == b"Thorpe Grange "
+    assert from_air(Radio([b" Thorpe Grange"]), "Thorpe Grange") == b" Thorpe Grange"
+    # An exact match needs no correcting, and a different name is not one.
+    assert from_air(Radio([b"Thorpe Grange"]), "Thorpe Grange") is None
+    assert from_air(Radio([b"Thorpe Grange Guest"]), "Thorpe Grange") is None
+    assert from_air(Radio([b""]), "Thorpe Grange") is None

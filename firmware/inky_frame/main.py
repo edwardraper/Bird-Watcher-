@@ -128,20 +128,68 @@ def wifi_reason(wlan):
     return ": " + WIFI_STATUS.get(code, "status %s" % code)
 
 
+def matching_ssid(wlan, wanted):
+    """The broadcast SSID that `wanted` was meant to be, or None.
+
+    Access point names can carry leading or trailing spaces, and nothing
+    shows them: not the router's own app, not the wifi menu, not the join
+    dialog. A network called "Thorpe Grange " reads as "Thorpe Grange"
+    everywhere a person can see it, and the frame then reports, quite
+    correctly, that there is no access point with that name.
+
+    So when an exact join fails, look for a name that differs only in
+    whitespace and use its real bytes. Only ever consulted after a
+    failure, so a network that simply is not there still fails.
+    """
+    try:
+        found = wlan.scan()
+    except Exception:  # pragma: no cover - radio busy or off
+        return None
+    target = wanted.strip()
+    if not target:
+        return None
+    for entry in found:
+        raw = entry[0]
+        try:
+            name = raw.decode()
+        except Exception:
+            continue
+        if name != wanted and name.strip() == target:
+            return raw
+    return None
+
+
+def join(wlan, ssid, password):
+    """Ask the radio to join, and wait. True if it got there."""
+    wlan.connect(ssid, password)
+    deadline = time.ticks_add(time.ticks_ms(), WIFI_TIMEOUT_SECONDS * 1000)
+    while not wlan.isconnected():
+        if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
+            return False
+        time.sleep(0.5)
+    return True
+
+
 def connect_wifi():
     """Join the network, or give up after WIFI_TIMEOUT_SECONDS."""
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     if not wlan.isconnected():
         inky_frame.led_wifi.on()
-        wlan.connect(secrets.WIFI_SSID, secrets.WIFI_PASSWORD)
-        deadline = time.ticks_add(time.ticks_ms(), WIFI_TIMEOUT_SECONDS * 1000)
-        while not wlan.isconnected():
-            if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
+        if not join(wlan, secrets.WIFI_SSID, secrets.WIFI_PASSWORD):
+            log("wifi timed out%s" % wifi_reason(wlan))
+            corrected = matching_ssid(wlan, secrets.WIFI_SSID)
+            if corrected is None:
+                inky_frame.led_wifi.off()
+                return None
+            # Worth saying out loud: the difference is invisible, and
+            # anyone reading this log will otherwise see two identical
+            # names and disbelieve the first failure.
+            log("retrying as %r -- the name is not what it looks like" % corrected)
+            if not join(wlan, corrected, secrets.WIFI_PASSWORD):
                 log("wifi timed out%s" % wifi_reason(wlan))
                 inky_frame.led_wifi.off()
                 return None
-            time.sleep(0.5)
     inky_frame.led_wifi.off()
     log("wifi up: %s" % wlan.ifconfig()[0])
     return wlan
