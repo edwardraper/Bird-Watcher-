@@ -44,18 +44,33 @@ class Ink(IntEnum):
 WIRE_CODES = (0x0, 0x1, 0x2, 0x3, 0x5, 0x6)
 
 # Internal index -> the pen index PicoGraphics uses on an Inky Frame.
-# Same idea as WIRE_CODES, different hardware: Pimoroni's PEN_3BIT order
-# is BLACK, WHITE, GREEN, BLUE, RED, YELLOW (then ORANGE and TAUPE, the
-# panel's cleaning colour), where ours is Spectra 6 wire order. Yellow and
-# green swap, red and blue swap.
-INKY_PEN_CODES = (0, 1, 5, 4, 3, 2)
+#
+# MEASURED ON THE PANEL, not read from documentation. Pimoroni's PEN_3BIT
+# order -- BLACK, WHITE, GREEN, BLUE, RED, YELLOW -- describes the older
+# seven-colour Inky Frame, and this is a Spectra 6. Drawing the palette
+# card through the documented table put blue where yellow should be, red
+# where blue should be and yellow where green should be.
+#
+# What the panel actually prints, read off the card:
+#
+#     pen 0  black      pen 3  red
+#     pen 1  white      pen 4  green
+#     pen 2  yellow     pen 5  blue
+#
+# which is the panel's own wire order, and not a permutation of it. Pens
+# 0-3 and 5 were read directly; pen 4 is the one colour and one pen left
+# over, and the card drawn through this table is what confirms it.
+INKY_PEN_CODES = (0, 1, 2, 3, 5, 4)
 
 # How those eight pens look, for the benefit of anything that opens the
 # exported PNG as a picture. The frame never reads these: pngdec in
 # PNG_COPY mode copies the palette *indices* straight into the
 # framebuffer, which is the whole reason the board's text survives the
 # journey un-dithered.
-INKY_SLOT_ORDER = (Ink.BLACK, Ink.WHITE, Ink.GREEN, Ink.BLUE, Ink.RED, Ink.YELLOW)
+# The inverse of INKY_PEN_CODES: slot n holds the colour pen n prints, so
+# these two must be changed together or the PNG looks right on a laptop
+# and wrong on the wall.
+INKY_SLOT_ORDER = (Ink.BLACK, Ink.WHITE, Ink.YELLOW, Ink.RED, Ink.GREEN, Ink.BLUE)
 INKY_EXTRA_RGB = ((243, 132, 30), (200, 190, 175))  # orange, taupe
 
 # Fallback RGB values, used when no PaletteConfig is supplied (tests,
