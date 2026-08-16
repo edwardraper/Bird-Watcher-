@@ -83,6 +83,10 @@ class FakeNetwork:
 
     def __init__(self, connected: bool = True) -> None:
         self.connected = connected
+        self.status_code = -2
+        # What the radio can see, as raw bytes -- the point being that a
+        # name may not be spelled the way anyone thinks it is.
+        self.visible: list[bytes] = [b"net"]
 
     def WLAN(self, _interface: int):  # noqa: N802 - matching MicroPython
         outer = self
@@ -96,6 +100,14 @@ class FakeNetwork:
 
             def connect(self, _ssid: str, _password: str) -> None:
                 pass
+
+            def scan(self):
+                return [(name, b"\x00" * 6, 4, -50, 5, False) for name in outer.visible]
+
+            def status(self) -> int:
+                # MicroPython reports why a join failed; -2 is "no access
+                # point with that name", the 5GHz/typo case.
+                return 3 if outer.connected else outer.status_code
 
             def disconnect(self) -> None:
                 pass
@@ -164,10 +176,22 @@ def frame(tmp_path: Path, monkeypatch):
     }.items():
         monkeypatch.setitem(sys.modules, name, module)
 
+    # MicroPython's monotonic clock. CPython has no ticks_* at all, so
+    # without these the wifi timeout branch raises AttributeError instead
+    # of timing out -- and every test of it passes for the wrong reason,
+    # because a raised exception and a timeout leave the same wreckage.
+    monkeypatch.setattr(time, "ticks_ms", lambda: int(time.time() * 1000), raising=False)
+    monkeypatch.setattr(time, "ticks_add", lambda t, d: t + d, raising=False)
+    monkeypatch.setattr(time, "ticks_diff", lambda a, b: a - b, raising=False)
+
     spec = importlib.util.spec_from_file_location("frame_main", FIRMWARE)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # No test is about how long the radio is given, and with the timeout
+    # branch now actually reachable the default 30s would be spent, twice
+    # over, waiting for a fake radio to fail.
+    module.WIFI_TIMEOUT_SECONDS = 0
 
     # Keep the device's writes inside tmp_path.
     module.IMAGE_PATH = str(tmp_path / "board.png")
@@ -262,3 +286,85 @@ def test_the_clock_is_only_set_when_it_is_wrong(frame) -> None:
     frame.main.cycle()
     # The host clock is correct, so NTP is not needed.
     assert frame.inky.clock_set == 0
+
+
+def test_a_wifi_failure_says_which_failure_it_was(frame, capsys) -> None:
+    """Thirty seconds of nothing looks the same for every wifi problem.
+
+    A wrong password, a 5GHz-only network and a router that never
+    answered are one message apart on the panel's own log, and that
+    message is the whole diagnosis when the frame is across the room.
+    """
+    frame.net.connected = False
+    frame.net.status_code = -2
+    frame.main.cycle()
+    assert "no access point with that name" in capsys.readouterr().out
+
+
+def test_a_wrong_password_says_so(frame, capsys) -> None:
+    frame.net.connected = False
+    frame.net.status_code = -3
+    frame.main.cycle()
+    assert "wrong password" in capsys.readouterr().out
+
+
+def test_an_unknown_status_still_reports_the_number(frame, capsys) -> None:
+    frame.net.connected = False
+    frame.net.status_code = 99
+    frame.main.cycle()
+    assert "status 99" in capsys.readouterr().out
+
+
+def test_a_trailing_space_in_the_network_name_is_recovered(frame, capsys) -> None:
+    """The name in secrets.py is what a person can see; the broadcast
+    name is what the radio hears, and they are not always the same.
+
+    A real network called "Thorpe Grange " reads as "Thorpe Grange" in
+    the router's app, in the wifi menu and in the join dialog. Nothing
+    renders the space, so nothing can be blamed for it -- the frame just
+    reports, correctly, that no such network exists.
+    """
+    frame.net.connected = False
+    frame.net.visible = [b"Thorpe Grange "]
+    frame.main.secrets.WIFI_SSID = "Thorpe Grange"
+
+    joined: list = []
+
+    def fake_join(wlan, ssid, password):
+        joined.append(ssid)
+        # The exact name fails; the bytes off the air succeed.
+        connected = isinstance(ssid, bytes)
+        frame.net.connected = connected
+        return connected
+
+    frame.main.join = fake_join
+    assert frame.main.connect_wifi() is not None
+    assert joined == ["Thorpe Grange", b"Thorpe Grange "]
+    assert "not what it looks like" in capsys.readouterr().out
+
+
+def test_a_network_that_is_simply_absent_still_fails(frame) -> None:
+    """The whitespace rescue must not turn a missing network into a
+    different one that happens to be nearby."""
+    frame.net.connected = False
+    frame.net.visible = [b"Somebody Else"]
+    frame.main.secrets.WIFI_SSID = "Thorpe Grange"
+    assert frame.main.connect_wifi() is None
+
+
+def test_the_rescue_only_matches_on_whitespace(frame) -> None:
+    from_air = frame.main.matching_ssid
+
+    class Radio:
+        def __init__(self, names):
+            self.names = names
+
+        def scan(self):
+            return [(n, b"", 4, -50, 5, False) for n in self.names]
+
+    assert from_air(Radio([b"Thorpe Grange "]), "Thorpe Grange") == b"Thorpe Grange "
+    assert from_air(Radio([b" Thorpe Grange"]), "Thorpe Grange") == b" Thorpe Grange"
+    # An exact match needs no correcting, and a different name is not one.
+    assert from_air(Radio([b"Thorpe Grange"]), "Thorpe Grange") is None
+    assert from_air(Radio([b"Thorpe Grange Guest"]), "Thorpe Grange") is None
+    assert from_air(Radio([b""]), "Thorpe Grange") is None
