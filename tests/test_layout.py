@@ -246,3 +246,71 @@ def test_truncation_fits_the_width_it_is_given():
 def test_short_text_is_left_alone():
     font = F.load_font("sans", 16)
     assert F.truncate("Robin", font, 200) == "Robin"
+
+
+# -- font resolution across platforms ------------------------------------
+
+
+def test_every_style_resolves_on_a_machine_with_only_macos_fonts(tmp_path, monkeypatch):
+    """A Mac has none of the Linux font packages.
+
+    The first thing anyone runs on a laptop is the palette card, and it
+    died on a missing 'sans_bold' because the search only ever looked in
+    /usr/share/fonts. This builds a directory holding exactly what macOS
+    ships and nothing else, and insists every style still finds a face.
+    """
+    from birddisplay.render import fonts as fonts_module
+
+    mac_fonts = tmp_path / "Supplemental"
+    mac_fonts.mkdir()
+    # The names as macOS spells them, spaces and all.
+    for name in (
+        "Arial.ttf",
+        "Arial Bold.ttf",
+        "Georgia.ttf",
+        "Georgia Italic.ttf",
+        "Times New Roman.ttf",
+        "Times New Roman Bold.ttf",
+        "Times New Roman Italic.ttf",
+        "Verdana.ttf",
+    ):
+        (mac_fonts / name).write_bytes(b"")
+
+    monkeypatch.setattr(fonts_module, "ASSET_DIR", tmp_path / "no-assets")
+    monkeypatch.setattr(fonts_module, "SYSTEM_FONT_DIRS", (mac_fonts,))
+    fonts_module.find_font_file.cache_clear()
+    try:
+        for style in fonts_module.FONT_CANDIDATES:
+            found = fonts_module.find_font_file(style)
+            assert found.parent == mac_fonts, f"{style} escaped to {found}"
+            # Resolving is not enough: a bold style that quietly lands on
+            # the regular face gives a board whose small caps are back to
+            # being eaten by the 1-bit mask, and nothing says so.
+            if style.endswith("_bold"):
+                assert "Bold" in found.name, f"{style} fell through to {found.name}"
+            if style.endswith("_italic"):
+                assert "Italic" in found.name, f"{style} fell through to {found.name}"
+    finally:
+        fonts_module.find_font_file.cache_clear()
+
+
+def test_the_linux_names_still_win_when_both_are_present(tmp_path, monkeypatch):
+    """The wall board is drawn by the GitHub runner, so its fonts lead.
+
+    A laptop that happens to have both should still preview what the
+    runner will actually print.
+    """
+    from birddisplay.render import fonts as fonts_module
+
+    both = tmp_path / "both"
+    both.mkdir()
+    for name in ("DejaVuSans-Bold.ttf", "Arial Bold.ttf"):
+        (both / name).write_bytes(b"")
+
+    monkeypatch.setattr(fonts_module, "ASSET_DIR", tmp_path / "no-assets")
+    monkeypatch.setattr(fonts_module, "SYSTEM_FONT_DIRS", (both,))
+    fonts_module.find_font_file.cache_clear()
+    try:
+        assert fonts_module.find_font_file("sans_bold").name == "DejaVuSans-Bold.ttf"
+    finally:
+        fonts_module.find_font_file.cache_clear()

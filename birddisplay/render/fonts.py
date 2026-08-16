@@ -29,6 +29,14 @@ SYSTEM_FONT_DIRS = (
     Path("/usr/share/fonts/truetype/freefont"),
     Path("/usr/share/fonts/truetype"),
     Path("/usr/share/fonts"),
+    # macOS. /Library/Fonts is nearly empty on a modern install -- the
+    # ones that are actually there live under /System/Library/Fonts, and
+    # the familiar Arial/Georgia/Times set is in its Supplemental folder.
+    # Without these a Mac finds nothing at all and the first thing anyone
+    # runs on a laptop dies on a missing font.
+    Path("/System/Library/Fonts/Supplemental"),
+    Path("/System/Library/Fonts"),
+    Path.home() / "Library" / "Fonts",
     Path("/Library/Fonts"),
     Path("C:/Windows/Fonts"),
 )
@@ -36,20 +44,45 @@ SYSTEM_FONT_DIRS = (
 # Style -> candidate filenames, best first. Every style ends with a
 # candidate that ships in fonts-dejavu-core, so nothing is ever missing
 # on a stock Pi -- italic just quietly degrades to upright.
+#
+# The Linux names lead, because the board that goes on the wall is drawn
+# by the GitHub runner and that is what it has. The macOS names trail so
+# a laptop can draw a preview and a palette card without installing
+# anything; a preview set in Arial rather than DejaVu Sans is a few
+# pixels wider here and there, which matters for judging a layout and
+# not at all for judging whether pen 2 is green.
 FONT_CANDIDATES: dict[str, tuple[str, ...]] = {
-    "sans": ("DejaVuSans.ttf", "LiberationSans-Regular.ttf", "FreeSans.ttf"),
+    "sans": (
+        "DejaVuSans.ttf",
+        "LiberationSans-Regular.ttf",
+        "FreeSans.ttf",
+        "Arial.ttf",
+        "Verdana.ttf",
+    ),
     "sans_bold": (
         "DejaVuSans-Bold.ttf",
         "LiberationSans-Bold.ttf",
         "FreeSansBold.ttf",
+        "Arial Bold.ttf",
+        "Verdana Bold.ttf",
         "DejaVuSans.ttf",
+        "Arial.ttf",
     ),
-    "serif": ("DejaVuSerif.ttf", "LiberationSerif-Regular.ttf", "FreeSerif.ttf"),
+    "serif": (
+        "DejaVuSerif.ttf",
+        "LiberationSerif-Regular.ttf",
+        "FreeSerif.ttf",
+        "Georgia.ttf",
+        "Times New Roman.ttf",
+    ),
     "serif_italic": (
         "DejaVuSerif-Italic.ttf",
         "LiberationSerif-Italic.ttf",
         "FreeSerifItalic.ttf",
+        "Georgia Italic.ttf",
+        "Times New Roman Italic.ttf",
         "DejaVuSerif.ttf",
+        "Georgia.ttf",
     ),
     # Times New Roman itself is Monotype's and ships with neither Raspberry
     # Pi OS nor most Linux boxes. Liberation Serif is metric-compatible with
