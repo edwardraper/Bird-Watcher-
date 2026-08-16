@@ -156,9 +156,20 @@ def frame(tmp_path: Path, monkeypatch):
 
     picographics = types.ModuleType("picographics")
     picographics.DISPLAY_INKY_FRAME_7 = 7  # type: ignore[attr-defined]
-    picographics.PicoGraphics = lambda _display: types.SimpleNamespace(  # type: ignore[attr-defined]
-        update=lambda: drawn.append("update")
-    )
+    class FakeGraphics:
+        """Records the calls in order, which is the whole point: a clear
+        that happens after the decode would wipe the board."""
+
+        def set_pen(self, pen) -> None:
+            drawn.append("pen%s" % pen)
+
+        def clear(self) -> None:
+            drawn.append("clear")
+
+        def update(self) -> None:
+            drawn.append("update")
+
+    picographics.PicoGraphics = lambda _display: FakeGraphics()  # type: ignore[attr-defined]
 
     secrets = types.ModuleType("secrets")
     secrets.WIFI_SSID = "net"  # type: ignore[attr-defined]
@@ -194,6 +205,7 @@ def frame(tmp_path: Path, monkeypatch):
     module.WIFI_TIMEOUT_SECONDS = 0
     # Nor is any test about how long the panel is left to settle.
     module.PANEL_SETTLE_SECONDS = 0
+    module.CLEAR_SETTLE_SECONDS = 0
 
     # Keep the device's writes inside tmp_path.
     module.IMAGE_PATH = str(tmp_path / "board.png")
@@ -495,3 +507,36 @@ def test_the_panel_is_left_to_settle_before_the_power_can_be_cut(frame) -> None:
     assert frame.main.PANEL_SETTLE_SECONDS in slept, (
         "nothing waited for the panel between update() and sleep_for()"
     )
+
+
+def test_the_panel_is_cleared_before_the_board_is_decoded(frame) -> None:
+    """Order is the whole point.
+
+    A clear after the decode would wipe the board off the glass, which is
+    the failure this was added to rule out rather than cause. The image
+    is opened after the wipe as well, so the board lands on a panel that
+    has just been taken to white.
+    """
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+
+    assert "clear" in frame.drawn, "the panel was never cleared"
+    board = frame.main.IMAGE_PATH
+    assert frame.drawn.index("clear") < frame.drawn.index(board), (
+        "the clear must come before the board is decoded, not after it"
+    )
+    # White, not black: pen 1 on the order measured on this panel.
+    assert frame.drawn[frame.drawn.index("clear") - 1] == "pen1"
+    # Two refreshes now, the wipe and the board.
+    assert frame.drawn.count("update") == 2
+
+
+def test_clearing_can_be_turned_off(frame) -> None:
+    """It costs a second full refresh every cycle, so it must be one
+    constant to switch off once the fault is understood."""
+    frame.main.CLEAR_BEFORE_DRAW = False
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+
+    assert "clear" not in frame.drawn
+    assert frame.drawn.count("update") == 1
