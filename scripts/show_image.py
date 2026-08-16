@@ -30,7 +30,9 @@ from birddisplay.render.palette import (  # noqa: E402
 
 
 def prepare(path: Path, config, exact: bool) -> Image.Image:
-    width, height = config.display.width, config.display.height
+    # The composed board, which is not the panel when the frame hangs on
+    # its side -- the display backend does the turning.
+    width, height = config.display.board_size
     with Image.open(path) as handle:
         source = handle.convert("RGB")
 
