@@ -192,6 +192,8 @@ def frame(tmp_path: Path, monkeypatch):
     # branch now actually reachable the default 30s would be spent, twice
     # over, waiting for a fake radio to fail.
     module.WIFI_TIMEOUT_SECONDS = 0
+    # Nor is any test about how long the panel is left to settle.
+    module.PANEL_SETTLE_SECONDS = 0
 
     # Keep the device's writes inside tmp_path.
     module.IMAGE_PATH = str(tmp_path / "board.png")
@@ -450,3 +452,46 @@ def test_the_setting_is_off_unless_secrets_says_otherwise(frame) -> None:
     frame.responses["manifest"]["sha256"] = "abc"
     frame.main.cycle()
     assert frame.drawn == []
+
+
+def test_a_clock_set_to_the_future_is_corrected(frame, monkeypatch) -> None:
+    """The real frame came up believing it was 2082.
+
+    A test that only looked downwards -- "is the year before 2024?" --
+    saw 2082, decided the clock had been set, and never asked NTP. The
+    24-hour refresh rule is computed from that clock, so a wrong one
+    makes it meaningless in a way nothing reports.
+    """
+    monkeypatch.setattr(
+        frame.main.time, "localtime", lambda *a: (2082, 1, 1, 8, 11, 52, 0, 1)
+    )
+    frame.main.cycle()
+    assert frame.inky.clock_set == 1, "an implausible year must be corrected"
+
+
+def test_a_plausible_clock_is_left_alone(frame, monkeypatch) -> None:
+    """NTP on every wake would be a needless round trip on a board whose
+    whole point is a few seconds of radio."""
+    monkeypatch.setattr(
+        frame.main.time, "localtime", lambda *a: (2026, 8, 16, 20, 0, 0, 5, 228)
+    )
+    frame.main.cycle()
+    assert frame.inky.clock_set == 0
+
+
+def test_the_panel_is_left_to_settle_before_the_power_can_be_cut(frame) -> None:
+    """update() returns when the waveform has been sent, and the next
+    thing this firmware does is switch the board off at the RTC. Pull the
+    supply before the particles have come to rest and the image never
+    sets -- which reads, from across the room, as a refresh that
+    completed and drew nothing.
+    """
+    slept: list = []
+    frame.main.time.sleep = lambda seconds: slept.append(seconds)
+
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+
+    assert frame.main.PANEL_SETTLE_SECONDS in slept, (
+        "nothing waited for the panel between update() and sleep_for()"
+    )
