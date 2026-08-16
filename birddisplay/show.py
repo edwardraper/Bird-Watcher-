@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
@@ -62,6 +63,7 @@ def run(
 ) -> int:
     renderer = BoardRenderer(config)
     headline = ""
+    board: Board | None = None
 
     try:
         board = load_board(config.cache.board_path)
@@ -110,9 +112,55 @@ def run(
         display.headline = headline
     try:
         display.show(image)
+        # One extra board per other sighting, so a button on the frame has
+        # somewhere to go. Only the export backend has any use for these:
+        # a panel shows one thing at a time, and a preview PNG is a file.
+        if board is not None and hasattr(display, "show_alternate"):
+            render_alternates(config, board, display)
     finally:
         display.close()
     return 0
+
+
+def render_alternates(config: Config, board: Board, display) -> None:
+    """Draw a whole board for each of the other sightings.
+
+    An alternate is the same board with a different bird at the top of
+    it, so it goes through the same renderer with the headline swapped --
+    which is why Feature carries a sighting, a picture and a sentence:
+    those are exactly the three things the headline slot needs.
+
+    A failure here costs a button press, not the board. The main PNG is
+    already written by the time this runs, and the frame falls back to it
+    when an alternate it asks for is not in the manifest.
+    """
+    for index, feature in enumerate(board.alternates, start=1):
+        swapped = replace(
+            board,
+            headline=feature.sighting,
+            headline_photo=feature.photo,
+            headline_description=feature.description,
+            # The bird now at the top should not also be in the list
+            # underneath itself.
+            also_seen=[
+                s
+                for s in board.also_seen
+                if s.species.code != feature.sighting.species.code
+            ],
+        )
+        try:
+            image = load_headline_image(swapped)
+            is_plate = image is not None and "A" in image.getbands()
+            if config.display.portrait or is_plate:
+                canvas = PlateBoardRenderer(config).render(swapped, image)
+            else:
+                canvas = BoardRenderer(config).render(swapped)
+            display.show_alternate(canvas, feature.sighting.species.common_name)
+        except Exception:  # noqa: BLE001 - one missing alternate is survivable
+            log.exception(
+                "could not draw the alternate board for %s",
+                feature.sighting.species.common_name,
+            )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

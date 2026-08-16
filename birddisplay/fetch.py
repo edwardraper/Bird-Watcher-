@@ -20,7 +20,7 @@ from typing import Any, Iterable, Sequence
 from .cache import load_state, record_featured, save_board, save_state
 from .config import Config, ConfigError, load_config
 from .log import setup_logging
-from .model import Board, Sighting
+from .model import Board, Feature, Sighting
 from .sources.commonness import Commonness
 from .sources.ebird import EbirdClient
 from .sources.http import FetchError, HttpClient
@@ -118,6 +118,44 @@ def _pick_headline(
     return candidates[0], None
 
 
+def resolve_alternates(
+    sightings: Sequence[Sighting], images: ImageSource | None
+) -> list[Feature]:
+    """Find a picture and a sentence for each of the other sightings.
+
+    These become whole boards of their own, so that a button on the frame
+    can page from the headline to the next bird. The frame renders
+    nothing -- it copies a finished PNG into its framebuffer -- so every
+    board it can be asked for has to have been drawn by the workflow
+    hours earlier.
+
+    A bird with no usable picture is dropped rather than carried: an
+    alternate exists to be looked at, and a board with a name and no bird
+    is not worth a button press. Failing to find one is ordinary and not
+    an error -- most of these are commoner species with no plate, and the
+    photograph is whatever Wikipedia happens to have.
+    """
+    if images is None:
+        return []
+    features: list[Feature] = []
+    for sighting in sightings:
+        try:
+            photo = images.photo_for(sighting.species)
+        except (ImageUnavailable, FetchError) as exc:
+            log.info("no picture for %s: %s", sighting.species.common_name, exc)
+            continue
+        description = ""
+        try:
+            description = images.description_for(sighting.species)
+        except Exception:  # noqa: BLE001 - a missing sentence is not a failure
+            log.info("no description for %s", sighting.species.common_name)
+        features.append(
+            Feature(sighting=sighting, photo=photo, description=description)
+        )
+    log.info("resolved %d alternate board(s)", len(features))
+    return features
+
+
 def build_board(
     config: Config,
     taxonomy: Taxonomy,
@@ -156,6 +194,10 @@ def build_board(
         except Exception:  # noqa: BLE001 - a missing sentence is not a failed fetch
             log.exception("could not fetch a description for %s", headline.species.code)
 
+    alternates = resolve_alternates(
+        also_seen[: config.board.also_seen_count], images
+    )
+
     region = config.region
     note = (
         f"{len(recent)} species within {region.radius_km} km "
@@ -171,6 +213,7 @@ def build_board(
         species_count=len(recent),
         checklist_note=note,
         headline_description=description,
+        alternates=alternates,
     )
     return board, headline
 
