@@ -62,10 +62,16 @@ is right and everything else follows. If green and yellow are swapped,
 ## What it does, and what it costs
 
 Every two hours it wakes and downloads `board.json`, a few hundred bytes.
-If the sha there matches what it drew last time, it goes straight back to
-sleep without touching the panel: a quiet cycle is a few seconds of radio
-and nothing else. Only when the sha changes does it pull the PNG (tens of
-kilobytes) and spend the thirty seconds a Spectra 6 refresh takes.
+If the headline bird there matches what it drew last time, it goes straight
+back to sleep without touching the panel: a quiet cycle is a few seconds of
+radio and nothing else. Only when the bird changes does it pull the PNG
+(tens of kilobytes) and spend the thirty seconds a Spectra 6 refresh takes.
+(The board is republished with a fresh date every two hours, so its sha
+changes even when the bird does not — which is why the bird decides.)
+
+Each network request is tried a few times within the wake before the cycle
+is given up: the radio is already up by then, so a retry is nearly free,
+and it is what gets a new bird onto the glass despite a dropped socket.
 
 Once a day it refreshes anyway, whether or not anything changed. E-ink that
 holds the same image for a very long time starts to ghost, and one refresh
@@ -86,7 +92,7 @@ Failures retry after 15 minutes, three times, then wait for the next
 scheduled wake. Plug it into USB and open Thonny to see why.
 
 **Button A forces a refresh** — press it and the frame wakes, downloads and
-redraws regardless of the sha. Useful when you have just changed the layout
+redraws even if the bird is unchanged. Useful when you have just changed the layout
 and do not want to wait two hours to see it.
 
 ## Where the board comes from

@@ -15,12 +15,14 @@ So the frame does four things:
 
 Three rules, each of which exists because this hangs on a wall:
 
-**Never refresh the panel unless the picture changed.** A Spectra 6 refresh
-takes thirty seconds, drives the panel hard and costs real battery. Most
-two-hour windows bring no change worth the ink -- birds are not a news
-feed -- so the manifest's sha decides, and a quiet cycle costs one small
-HTTPS GET. The exception is a daily refresh even when nothing changed,
-which is what keeps ghosting from setting in.
+**Never refresh the panel unless the bird changed.** A Spectra 6 refresh
+takes thirty seconds, drives the panel hard and costs real battery. The
+board is republished every two hours with a fresh date on it, so its sha
+changes even when the bird does not -- which is why the manifest's
+headline decides, not the sha: a quiet cycle costs one small HTTPS GET,
+and the panel is only driven when there is a different bird to show. The
+exception is a daily refresh even when nothing changed, which is what
+keeps ghosting from setting in.
 
 **Any failure means the glass is left alone.** No wifi, no DNS, a 404, a
 truncated download, a PNG that will not decode: log it, sleep, try again.
@@ -87,26 +89,15 @@ MAX_YEAR = 2075
 # nothing against a two-hour cycle.
 PANEL_SETTLE_SECONDS = 10
 
-# Wipe the panel to white and let it rest before drawing the board.
-#
-# The suspicion this exists to test: that a refresh over an image already
-# on the glass is what fails, and that a panel taken to white first will
-# take the board. Plenty of e-ink examples clear before drawing for
-# exactly this reason.
-#
-# It is not free. Two full refreshes every cycle rather than one, so
-# roughly double the panel wear and double the current spent drawing,
-# and a cycle that takes two minutes instead of forty seconds. Worth it
-# while the fault is unexplained; worth turning off once it is not.
-CLEAR_BEFORE_DRAW = True
-
-# How long to leave the panel white before drawing over it. Deliberately
-# generous -- the point is to give it every chance to finish, not to be
-# quick.
-CLEAR_SETTLE_SECONDS = 60
-
-# The white pen, in the order measured on this panel: 0 black, 1 white.
-WHITE_PEN = 1
+# How many times to try each network request within one wake, and how
+# long to pause between tries. The radio is already up and its cost paid,
+# so an immediate retry is nearly free -- far cheaper than abandoning the
+# wake and spending another fifteen minutes with the wrong bird on the
+# wall. Sized for transient failures (a dropped socket, a slow CDN edge);
+# a network that is genuinely down still fails fast and falls through to
+# the between-wake retry schedule.
+NETWORK_ATTEMPTS = 3
+ATTEMPT_PAUSE_SECONDS = 5
 
 CHUNK = 1024
 
@@ -138,7 +129,7 @@ def read_state():
         with open(STATE_PATH) as handle:
             return json.load(handle)
     except (OSError, ValueError):
-        return {"sha256": "", "refreshed_at": 0, "failures": 0}
+        return {"sha256": "", "headline": "", "refreshed_at": 0, "failures": 0}
 
 
 def write_state(state):
@@ -255,6 +246,30 @@ def disconnect_wifi(wlan):
         pass
 
 
+def attempt(what, action):
+    """Run a network action, retrying within this wake.
+
+    One flaky socket must not cost the cycle: the board has already spent
+    the expensive part -- waking, joining wifi -- so giving the request
+    every reasonable chance here is what gets the new bird onto the glass
+    today rather than fifteen minutes from now. Persistent failure still
+    raises, and the caller's between-wake schedule takes over.
+    """
+    tries = 0
+    while True:
+        tries += 1
+        try:
+            return action()
+        except Exception as exc:  # noqa: BLE001 - retried, then re-raised
+            if tries >= NETWORK_ATTEMPTS:
+                raise
+            log(
+                "%s failed (attempt %d/%d), trying again: %s"
+                % (what, tries, NETWORK_ATTEMPTS, exc)
+            )
+            time.sleep(ATTEMPT_PAUSE_SECONDS)
+
+
 def get_json(url):
     socket = urequest.urlopen(url)
     try:
@@ -307,20 +322,6 @@ def draw(path):
     gc.collect()
     graphics = PicoGraphics(DISPLAY_INKY_FRAME_7)
 
-    if CLEAR_BEFORE_DRAW:
-        inky_frame.led_busy.on()
-        log("clearing the panel first (~30s)")
-        graphics.set_pen(WHITE_PEN)
-        graphics.clear()
-        graphics.update()
-        log("panel cleared; resting %ds" % CLEAR_SETTLE_SECONDS)
-        time.sleep(CLEAR_SETTLE_SECONDS)
-        inky_frame.led_busy.off()
-
-    # Read after the clear, not before it: the file has been on flash
-    # since the download, and opening it again here means the board is
-    # decoded onto a panel that has just been wiped rather than onto a
-    # framebuffer prepared a minute and a half ago.
     png = pngdec.PNG(graphics)
     png.open_file(path)
     # The indices in this file are already Inky pen numbers. PNG_COPY is
@@ -364,7 +365,7 @@ def cycle():
     state = read_state()
     forced = inky_frame.woken_by_button()
     if forced:
-        log("woken by a button; refreshing whatever the sha says")
+        log("woken by a button; refreshing whether or not the bird changed")
 
     wlan = None
     try:
@@ -383,8 +384,11 @@ def cycle():
             log("clock says %d; setting it from NTP" % year)
             inky_frame.set_time()
 
-        manifest = get_json(secrets.MANIFEST_URL)
+        manifest = attempt(
+            "manifest fetch", lambda: get_json(secrets.MANIFEST_URL)
+        )
         published = manifest.get("sha256", "")
+        bird = manifest.get("headline", "")
         stale = hours_since(state.get("refreshed_at", 0)) >= FORCE_REFRESH_HOURS
 
         # A refresh that began and never reported finishing. The panel is
@@ -397,17 +401,21 @@ def cycle():
 
         always = getattr(secrets, "ALWAYS_REDRAW", ALWAYS_REDRAW)
         if always:
-            log("ALWAYS_REDRAW is on; drawing whatever the sha says")
+            log("ALWAYS_REDRAW is on; drawing whether or not the bird changed")
 
-        if (
-            published
-            and published == state.get("sha256")
-            and not stale
-            and not forced
-            and not interrupted
-            and not always
-        ):
-            log("board unchanged (%s); leaving the panel alone" % published[:12])
+        # The bird decides, not the picture. The workflow republishes the
+        # board every two hours with a fresh date drawn on it, so the sha
+        # changes on nearly every publish even when the headline has not
+        # -- comparing shas meant a thirty-second refresh almost every
+        # wake. An old manifest with no headline falls back to the sha,
+        # which can only err on the side of drawing.
+        if bird:
+            unchanged = bird == state.get("headline")
+        else:
+            unchanged = bool(published) and published == state.get("sha256")
+
+        if unchanged and not stale and not forced and not interrupted and not always:
+            log("same bird (%s); leaving the panel alone" % (bird or published[:12]))
             state["failures"] = 0
             write_state(state)
             return REFRESH_MINUTES
@@ -415,7 +423,10 @@ def cycle():
         if stale:
             log("no refresh in %d hours; drawing anyway" % FORCE_REFRESH_HOURS)
 
-        download(secrets.BOARD_URL, IMAGE_PATH, manifest.get("bytes", 0))
+        attempt(
+            "board download",
+            lambda: download(secrets.BOARD_URL, IMAGE_PATH, manifest.get("bytes", 0)),
+        )
         disconnect_wifi(wlan)
         wlan = None
 
@@ -431,11 +442,12 @@ def cycle():
         draw(IMAGE_PATH)
 
         state["sha256"] = published
+        state["headline"] = bird
         state["drawing"] = ""
         state["refreshed_at"] = time.time()
         state["failures"] = 0
         write_state(state)
-        log("showing: %s" % manifest.get("headline", "?"))
+        log("showing: %s" % (bird or "?"))
         return REFRESH_MINUTES
 
     except Exception as exc:  # noqa: BLE001 - a wall display must not stop

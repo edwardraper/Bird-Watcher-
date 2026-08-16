@@ -205,7 +205,8 @@ def frame(tmp_path: Path, monkeypatch):
     module.WIFI_TIMEOUT_SECONDS = 0
     # Nor is any test about how long the panel is left to settle.
     module.PANEL_SETTLE_SECONDS = 0
-    module.CLEAR_SETTLE_SECONDS = 0
+    # Nor about how long to pause between network retries.
+    module.ATTEMPT_PAUSE_SECONDS = 0
 
     # Keep the device's writes inside tmp_path.
     module.IMAGE_PATH = str(tmp_path / "board.png")
@@ -223,7 +224,7 @@ def frame(tmp_path: Path, monkeypatch):
 
 
 def save_state(frame, **fields) -> None:
-    state = {"sha256": "", "refreshed_at": 0, "failures": 0}
+    state = {"sha256": "", "headline": "", "refreshed_at": 0, "failures": 0}
     state.update(fields)
     frame.state_path.write_text(json.dumps(state))
 
@@ -238,6 +239,33 @@ def test_a_new_board_is_downloaded_and_drawn(frame) -> None:
 def test_an_unchanged_board_never_touches_the_panel(frame) -> None:
     """The whole reason the manifest exists: most two-hour windows bring
     no change, and a refresh costs 30 seconds of driving the panel."""
+    save_state(frame, headline="Robin", refreshed_at=time.time())
+    minutes = frame.main.cycle()
+    assert frame.drawn == []
+    assert minutes == frame.main.REFRESH_MINUTES
+
+
+def test_a_republished_board_with_the_same_bird_is_left_alone(frame) -> None:
+    """The workflow redraws the board every two hours with a fresh date on
+    it, so the sha changes on nearly every publish. The bird is what the
+    wall is for, so the bird is what decides."""
+    save_state(frame, sha256="an-older-sha", headline="Robin", refreshed_at=time.time())
+    minutes = frame.main.cycle()
+    assert frame.drawn == []
+    assert minutes == frame.main.REFRESH_MINUTES
+
+
+def test_a_different_bird_is_drawn(frame) -> None:
+    save_state(frame, sha256="abc123", headline="Wren", refreshed_at=time.time())
+    frame.main.cycle()
+    assert "update" in frame.drawn
+    assert json.loads(frame.state_path.read_text())["headline"] == "Robin"
+
+
+def test_an_old_manifest_with_no_headline_falls_back_to_the_sha(frame) -> None:
+    """A frame can meet a manifest written before the headline existed;
+    the sha is the only change signal such a manifest carries."""
+    frame.responses["manifest"] = {"sha256": "abc123", "bytes": 4}
     save_state(frame, sha256="abc123", refreshed_at=time.time())
     minutes = frame.main.cycle()
     assert frame.drawn == []
@@ -248,7 +276,7 @@ def test_a_day_without_a_refresh_forces_one(frame) -> None:
     """E-ink that holds one image for a long time starts to ghost."""
     save_state(
         frame,
-        sha256="abc123",
+        headline="Robin",
         refreshed_at=time.time() - (frame.main.FORCE_REFRESH_HOURS + 1) * 3600,
     )
     frame.main.cycle()
@@ -256,7 +284,7 @@ def test_a_day_without_a_refresh_forces_one(frame) -> None:
 
 
 def test_a_button_press_forces_a_refresh(frame) -> None:
-    save_state(frame, sha256="abc123", refreshed_at=time.time())
+    save_state(frame, headline="Robin", refreshed_at=time.time())
     frame.inky.button = True
     frame.main.cycle()
     assert "update" in frame.drawn
@@ -394,7 +422,9 @@ def test_an_interrupted_refresh_is_drawn_again(frame) -> None:
     blank until the daily forced refresh -- which is how a wall stays
     empty for a day with nothing reporting a fault.
     """
-    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="abc")
+    save_state(
+        frame, sha256="abc", headline="Robin", refreshed_at=time.time(), drawing="abc"
+    )
     frame.responses["manifest"]["sha256"] = "abc"
 
     frame.main.cycle()
@@ -430,8 +460,7 @@ def test_the_marker_is_set_before_the_panel_is_touched(frame) -> None:
 def test_an_unchanged_board_is_still_left_alone(frame) -> None:
     """The rescue must not become "redraw every time", which would drive a
     thirty-second panel update every two hours forever."""
-    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="")
-    frame.responses["manifest"]["sha256"] = "abc"
+    save_state(frame, headline="Robin", refreshed_at=time.time(), drawing="")
 
     frame.main.cycle()
     assert frame.drawn == []
@@ -444,8 +473,7 @@ def test_always_redraw_draws_an_unchanged_board(frame) -> None:
     see its own glass -- so this makes the panel follow from the last
     wake instead.
     """
-    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="")
-    frame.responses["manifest"]["sha256"] = "abc"
+    save_state(frame, headline="Robin", refreshed_at=time.time(), drawing="")
     frame.main.secrets.ALWAYS_REDRAW = True
     try:
         frame.main.cycle()
@@ -460,8 +488,7 @@ def test_the_setting_is_off_unless_secrets_says_otherwise(frame) -> None:
     assert frame.main.ALWAYS_REDRAW is False
     assert not hasattr(frame.main.secrets, "ALWAYS_REDRAW")
 
-    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="")
-    frame.responses["manifest"]["sha256"] = "abc"
+    save_state(frame, headline="Robin", refreshed_at=time.time(), drawing="")
     frame.main.cycle()
     assert frame.drawn == []
 
@@ -509,34 +536,63 @@ def test_the_panel_is_left_to_settle_before_the_power_can_be_cut(frame) -> None:
     )
 
 
-def test_the_panel_is_cleared_before_the_board_is_decoded(frame) -> None:
-    """Order is the whole point.
-
-    A clear after the decode would wipe the board off the glass, which is
-    the failure this was added to rule out rather than cause. The image
-    is opened after the wipe as well, so the board lands on a panel that
-    has just been taken to white.
-    """
-    frame.responses["manifest"]["sha256"] = "abc"
-    frame.main.cycle()
-
-    assert "clear" in frame.drawn, "the panel was never cleared"
-    board = frame.main.IMAGE_PATH
-    assert frame.drawn.index("clear") < frame.drawn.index(board), (
-        "the clear must come before the board is decoded, not after it"
-    )
-    # White, not black: pen 1 on the order measured on this panel.
-    assert frame.drawn[frame.drawn.index("clear") - 1] == "pen1"
-    # Two refreshes now, the wipe and the board.
-    assert frame.drawn.count("update") == 2
-
-
-def test_clearing_can_be_turned_off(frame) -> None:
-    """It costs a second full refresh every cycle, so it must be one
-    constant to switch off once the fault is understood."""
-    frame.main.CLEAR_BEFORE_DRAW = False
-    frame.responses["manifest"]["sha256"] = "abc"
+def test_the_panel_is_not_cleared_before_the_board(frame) -> None:
+    """One refresh per cycle: the board is drawn straight over whatever is
+    on the glass, with no wipe-to-white first. The wipe doubled panel wear
+    and made every cycle two minutes instead of forty seconds."""
     frame.main.cycle()
 
     assert "clear" not in frame.drawn
     assert frame.drawn.count("update") == 1
+
+
+def test_a_flaky_manifest_fetch_is_retried_within_the_wake(frame) -> None:
+    """The expensive part of a wake -- the radio coming up -- is already
+    paid for by the time the first request goes out, so one dropped socket
+    must not cost the whole cycle."""
+    real = frame.main.urequest.urlopen
+    failures = ["boom"]
+
+    def flaky(url):
+        if url.endswith(".json") and failures:
+            raise OSError(failures.pop())
+        return real(url)
+
+    frame.main.urequest.urlopen = flaky
+    minutes = frame.main.cycle()
+    assert "update" in frame.drawn
+    assert minutes == frame.main.REFRESH_MINUTES
+
+
+def test_a_flaky_download_is_retried_within_the_wake(frame) -> None:
+    real = frame.main.urequest.urlopen
+    failures = ["boom"]
+
+    def flaky(url):
+        if url.endswith(".png") and failures:
+            raise OSError(failures.pop())
+        return real(url)
+
+    frame.main.urequest.urlopen = flaky
+    minutes = frame.main.cycle()
+    assert "update" in frame.drawn
+    assert minutes == frame.main.REFRESH_MINUTES
+    assert json.loads(frame.state_path.read_text())["headline"] == "Robin"
+
+
+def test_a_download_that_keeps_failing_gives_up_after_its_attempts(frame) -> None:
+    """Maximum chance, not infinite chance: a network that is genuinely
+    down still fails the cycle and falls back to the 15-minute retry."""
+    calls = []
+
+    def dead(url):
+        if url.endswith(".png"):
+            calls.append(url)
+            raise OSError("boom")
+        return FakeSocket(json.dumps(frame.responses["manifest"]).encode())
+
+    frame.main.urequest.urlopen = dead
+    minutes = frame.main.cycle()
+    assert frame.drawn == []
+    assert minutes == frame.main.RETRY_MINUTES
+    assert len(calls) == frame.main.NETWORK_ATTEMPTS
