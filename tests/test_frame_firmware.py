@@ -13,6 +13,7 @@ only: given this manifest and this saved state, did it draw?
 
 from __future__ import annotations
 
+import gc
 import importlib.util
 import json
 import sys
@@ -171,6 +172,14 @@ def frame(tmp_path: Path, monkeypatch):
 
     picographics.PicoGraphics = lambda _display: FakeGraphics()  # type: ignore[attr-defined]
 
+    machine = types.ModuleType("machine")
+    machine.reset_calls = []  # type: ignore[attr-defined]
+
+    def _reset() -> None:
+        machine.reset_calls.append(True)  # type: ignore[attr-defined]
+
+    machine.reset = _reset  # type: ignore[attr-defined]
+
     secrets = types.ModuleType("secrets")
     secrets.WIFI_SSID = "net"  # type: ignore[attr-defined]
     secrets.WIFI_PASSWORD = "pw"  # type: ignore[attr-defined]
@@ -182,6 +191,7 @@ def frame(tmp_path: Path, monkeypatch):
         "network": net,
         "pngdec": pngdec,
         "picographics": picographics,
+        "machine": machine,
         "urllib": urllib,
         "secrets": secrets,
     }.items():
@@ -194,6 +204,11 @@ def frame(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(time, "ticks_ms", lambda: int(time.time() * 1000), raising=False)
     monkeypatch.setattr(time, "ticks_add", lambda t, d: t + d, raising=False)
     monkeypatch.setattr(time, "ticks_diff", lambda a, b: a - b, raising=False)
+
+    # MicroPython's gc reports free heap bytes; CPython's does not. The
+    # value itself is never asserted on, only that the log lines calling
+    # it don't blow up the way a missing attribute would on the board.
+    monkeypatch.setattr(gc, "mem_free", lambda: 200000, raising=False)
 
     spec = importlib.util.spec_from_file_location("frame_main", FIRMWARE)
     assert spec and spec.loader
@@ -216,6 +231,7 @@ def frame(tmp_path: Path, monkeypatch):
         main=module,
         inky=inky,
         net=net,
+        machine=machine,
         drawn=drawn,
         responses=responses,
         state_path=Path(module.STATE_PATH),
@@ -512,18 +528,26 @@ def test_the_panel_is_left_to_settle_before_the_power_can_be_cut(frame) -> None:
 def test_the_panel_is_cleared_before_the_board_is_decoded(frame) -> None:
     """Order is the whole point.
 
-    A clear after the decode would wipe the board off the glass, which is
-    the failure this was added to rule out rather than cause. The image
-    is opened after the wipe as well, so the board lands on a panel that
-    has just been taken to white.
+    A clear after the *final* decode would wipe the board off the glass,
+    which is the failure this was added to rule out rather than cause.
+    The pre-flight decode that now happens first is deliberately not what
+    this test is about -- it exists so a failure there never reaches
+    clear() at all -- so what matters here is that clear() still precedes
+    the decode that is actually left on the glass when update() runs.
     """
+    frame.main.CLEAR_BEFORE_DRAW = True
     frame.responses["manifest"]["sha256"] = "abc"
     frame.main.cycle()
 
     assert "clear" in frame.drawn, "the panel was never cleared"
     board = frame.main.IMAGE_PATH
-    assert frame.drawn.index("clear") < frame.drawn.index(board), (
-        "the clear must come before the board is decoded, not after it"
+    # The board is decoded twice when clearing is on: once as a
+    # pre-flight, before anything touches the glass, and once again after
+    # the clear, onto the framebuffer that was just wiped.
+    assert frame.drawn.count(board) == 2, "pre-flight decode plus post-clear decode"
+    last_decode = len(frame.drawn) - 1 - frame.drawn[::-1].index(board)
+    assert frame.drawn.index("clear") < last_decode, (
+        "the clear must come before the final board decode, not after it"
     )
     # White, not black: pen 1 on the order measured on this panel.
     assert frame.drawn[frame.drawn.index("clear") - 1] == "pen1"
@@ -533,10 +557,56 @@ def test_the_panel_is_cleared_before_the_board_is_decoded(frame) -> None:
 
 def test_clearing_can_be_turned_off(frame) -> None:
     """It costs a second full refresh every cycle, so it must be one
-    constant to switch off once the fault is understood."""
+    constant to switch off once the fault is understood. Off is also now
+    the default, so this only needs to prove the flag still works."""
     frame.main.CLEAR_BEFORE_DRAW = False
     frame.responses["manifest"]["sha256"] = "abc"
     frame.main.cycle()
 
     assert "clear" not in frame.drawn
     assert frame.drawn.count("update") == 1
+    board = frame.main.IMAGE_PATH
+    assert frame.drawn.count(board) == 1, "no clear means no need to re-decode"
+
+
+def test_clearing_is_off_by_default(frame) -> None:
+    """The blank-wall fault was a post-clear allocation failure, not
+    anything about drawing over an existing image, so the experiment that
+    doubles panel wear and cycle time defaults off."""
+    assert frame.main.CLEAR_BEFORE_DRAW is False
+
+
+def test_a_decode_failure_leaves_the_panel_untouched(frame) -> None:
+    """The invariant a blank wall broke: any failure means the glass is
+    left alone. A decode that raises -- the shape of the real fault, a
+    heap allocation failing inside pngdec -- must not be able to reach
+    update() or clear(), on either the plain path or the higher-risk
+    clear-before-draw path.
+    """
+
+    def boom(self, _x, _y, mode=None):
+        raise MemoryError("simulated allocation failure")
+
+    frame.main.pngdec.PNG.decode = boom
+    frame.main.CLEAR_BEFORE_DRAW = True
+    frame.responses["manifest"]["sha256"] = "abc"
+
+    frame.main.cycle()
+
+    assert "update" not in frame.drawn, "a failed decode must never reach update()"
+    assert "clear" not in frame.drawn, "a failed decode must never reach clear()"
+
+
+def test_sleep_resets_after_the_usb_wait(frame, monkeypatch) -> None:
+    """On battery, sleep_for() cuts the power and this line is never
+    reached. On USB it falls through, and resetting there -- rather than
+    looping back into cycle() in the same session -- is what gives every
+    cycle a fresh heap identical to a battery cold boot.
+    """
+    slept: list = []
+    monkeypatch.setattr(frame.main.time, "sleep", lambda seconds: slept.append(seconds))
+
+    frame.main.sleep(5)
+
+    assert slept == [5 * 60]
+    assert frame.machine.reset_calls, "the USB fallthrough must reset for a fresh heap"

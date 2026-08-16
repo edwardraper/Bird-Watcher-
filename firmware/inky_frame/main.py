@@ -37,6 +37,7 @@ from across a room, and turn the digest into mush.
 
 import gc
 import json
+import machine
 import os
 import time
 
@@ -89,16 +90,25 @@ PANEL_SETTLE_SECONDS = 10
 
 # Wipe the panel to white and let it rest before drawing the board.
 #
-# The suspicion this exists to test: that a refresh over an image already
-# on the glass is what fails, and that a panel taken to white first will
-# take the board. Plenty of e-ink examples clear before drawing for
-# exactly this reason.
+# This used to default on, to test a suspicion: that a refresh over an
+# image already on the glass was what failed. It wasn't that. The real
+# fault was a heap-fragmentation allocation failure inside draw() itself
+# -- on USB, where main() used to loop forever in one MicroPython session,
+# the framebuffer and pngdec would occasionally fail to allocate on a
+# heap fragmented by the previous cycle's TLS handshakes and download
+# buffers. When that happened after this clear had already wiped the
+# panel, the broad except in cycle() swallowed it and the wall was left
+# blank. draw() below is now ordered so nothing touches the glass until a
+# decode has already succeeded once on this heap, which is the actual
+# fix; the fresh heap machine.reset() gives every USB cycle removes the
+# fragmentation this was ever fighting.
 #
-# It is not free. Two full refreshes every cycle rather than one, so
-# roughly double the panel wear and double the current spent drawing,
-# and a cycle that takes two minutes instead of forty seconds. Worth it
-# while the fault is unexplained; worth turning off once it is not.
-CLEAR_BEFORE_DRAW = True
+# So this defaults off. It is not free even when it works: two full
+# refreshes every cycle rather than one, so roughly double the panel wear
+# and double the current spent drawing, and a cycle that takes two
+# minutes instead of forty seconds. Kept as a flag for anyone who still
+# wants the wall certainly clean before every redraw.
+CLEAR_BEFORE_DRAW = False
 
 # How long to leave the panel white before drawing over it. Deliberately
 # generous -- the point is to give it every chance to finish, not to be
@@ -301,11 +311,30 @@ def download(url, path, expected_bytes=0):
 def draw(path):
     """Put the downloaded board on the glass.
 
+    Everything that can fail to allocate -- the framebuffer, the decoder,
+    the decode itself -- happens here before the panel is touched at all.
+    That order is the whole point: the invariant this firmware promises
+    is that any failure leaves the glass alone, and a clear() followed by
+    a failed decode would print a blank wall while every earlier log line
+    said the refresh was still in progress. So the pre-flight decode
+    below must succeed once, on this heap, before update() is ever
+    called -- only then is it safe to wipe the panel and draw again.
+
     PicoGraphics is created here rather than at import time because it
     reserves the framebuffer, and the TLS handshake above wants the room.
     """
     gc.collect()
     graphics = PicoGraphics(DISPLAY_INKY_FRAME_7)
+
+    # The indices in this file are already Inky pen numbers. PNG_COPY is
+    # what stops anything re-dithering the text. This first decode is the
+    # pre-flight: if the framebuffer, the decoder or the decode itself
+    # cannot allocate, it raises here, before graphics.update() has ever
+    # been called, and the panel still shows whatever it showed before.
+    png = pngdec.PNG(graphics)
+    png.open_file(path)
+    log("decoding board; %d bytes free" % gc.mem_free())
+    png.decode(0, 0, mode=pngdec.PNG_COPY)
 
     if CLEAR_BEFORE_DRAW:
         inky_frame.led_busy.on()
@@ -317,15 +346,14 @@ def draw(path):
         time.sleep(CLEAR_SETTLE_SECONDS)
         inky_frame.led_busy.off()
 
-    # Read after the clear, not before it: the file has been on flash
-    # since the download, and opening it again here means the board is
-    # decoded onto a panel that has just been wiped rather than onto a
-    # framebuffer prepared a minute and a half ago.
-    png = pngdec.PNG(graphics)
-    png.open_file(path)
-    # The indices in this file are already Inky pen numbers. PNG_COPY is
-    # what stops anything re-dithering the text.
-    png.decode(0, 0, mode=pngdec.PNG_COPY)
+        # Decode again onto the framebuffer the clear just wiped. This is
+        # not where a fresh allocation failure is expected -- the same
+        # decode just succeeded, on the same heap, a minute ago -- it is
+        # what makes the drawn image match the glass that was actually
+        # just cleared, rather than a framebuffer prepared before it.
+        png.open_file(path)
+        log("re-decoding board after clear; %d bytes free" % gc.mem_free())
+        png.decode(0, 0, mode=pngdec.PNG_COPY)
 
     inky_frame.led_busy.on()
     log("refreshing the panel (~30s)")
@@ -463,15 +491,33 @@ def sleep(minutes):
     On battery this returns nothing -- the board is off. On USB the RTC
     cannot cut power, so sleep_for falls through and we wait the interval
     out instead, which makes the same code work on a bench.
+
+    On that USB fallthrough, reset once the wait is over rather than
+    looping back into cycle() in the same MicroPython session. A cold
+    boot of /main.py is exactly what battery gives every wake -- a fresh
+    heap, with none of the previous cycle's TLS handshakes, download
+    buffers or old framebuffer left fragmenting it -- and it is that
+    fragmentation, not anything about the board or the network, that let
+    a heap allocation fail on the second and later cycles. This also
+    means the 15-minute retry cycles get a fresh heap each time instead
+    of compounding on top of each other.
+
+    In Thonny this is visible as the console dropping partway through:
+    the reset ends that MicroPython session, which is expected -- USB is
+    for watching one cycle happen, not for tailing a log across many.
     """
     log("sleeping for %d minutes" % minutes)
     inky_frame.sleep_for(minutes)
     time.sleep(minutes * 60)
+    machine.reset()
 
 
 def main():
-    while True:
-        sleep(cycle())
+    # One cycle, then sleep. sleep() never returns: on battery the RTC
+    # cuts the power, and on USB it resets the board once the wait is
+    # over. Either way the next cycle starts from a fresh boot of this
+    # file rather than a second trip around a loop.
+    sleep(cycle())
 
 
 if __name__ == "__main__":

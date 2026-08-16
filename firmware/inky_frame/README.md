@@ -37,12 +37,37 @@ secrets.py          your wifi and the two URLs (from secrets.example.py)
    download the board and refresh — about a minute in total, most of it the
    panel.
 
+   Watch for the console dropping partway through the wait that follows.
+   That's expected: on USB the RTC can't cut the board's power, so the
+   firmware waits out the interval and then hard-resets itself so the
+   next cycle gets the same fresh heap a battery cold boot would give it.
+   The reset ends that MicroPython session, and Thonny loses the
+   connection. USB is for watching one cycle happen, not for tailing a
+   log across many — once you've seen it draw, move to battery.
+
 5. **Then move it to battery.** This is not optional if you want the
    two-hour schedule: `inky_frame.sleep_for()` wakes the board by cutting
    its power and letting the RTC restore it, and the RTC cannot cut power
    that is coming down the USB cable. On USB the firmware notices it is
    still running and waits out the interval instead, which is fine for a
    bench and wrong for a wall.
+
+   1. In Thonny, open the **Files** view (View → Files) and save both
+      `main.py` and your filled-in `secrets.py` to the device — the
+      Raspberry Pi Pico entry, not your computer's folder — named exactly
+      that, at the device root. Running a file from an editor tab only
+      executes that buffer once; it does not install anything, so the
+      board still boots into nothing without this step.
+   2. Verify they're there: the device pane in Files should list both, or
+      run `import os; os.listdir()` in the Thonny shell and check for
+      `main.py` and `secrets.py`.
+   3. Unplug USB, connect the battery to the JST connector, and press any
+      front button to boot. The frame runs `/main.py`, draws once, and
+      cuts its own power; the RTC wakes it again every two hours from
+      there on, and button A still forces a refresh whenever you want one.
+   4. What "working" looks like: nothing visible between cycles — the
+      board is genuinely off — and the panel updates within a couple of
+      minutes of the workflow publishing a change.
 
 ## Check the inks before you trust anything
 
