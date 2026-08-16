@@ -59,6 +59,22 @@ MAX_RETRIES = 3
 # advice for keeping ghosting out of a panel that sits still for days.
 FORCE_REFRESH_HOURS = 24
 
+# Redraw on every wake, even when the board has not changed.
+#
+# Off by default because the sha comparison is what makes a battery
+# display worth having: a quiet cycle is a few seconds of radio, and a
+# drawing cycle is thirty seconds of panel at the highest current the
+# board ever draws. On costs materially more battery -- still months
+# rather than days, but fewer months.
+#
+# Worth turning on if you would rather the wall be certainly right than
+# certainly efficient. It makes the panel's contents follow from the last
+# wake rather than from a record of what was drawn hours ago, which no
+# amount of bookkeeping can fully guarantee: the frame cannot see its own
+# glass. Set ALWAYS_REDRAW = True in secrets.py to enable it without
+# editing this file.
+ALWAYS_REDRAW = False
+
 WIFI_TIMEOUT_SECONDS = 30
 CHUNK = 1024
 
@@ -312,12 +328,17 @@ def cycle():
         if interrupted:
             log("last refresh did not finish; drawing again")
 
+        always = getattr(secrets, "ALWAYS_REDRAW", ALWAYS_REDRAW)
+        if always:
+            log("ALWAYS_REDRAW is on; drawing whatever the sha says")
+
         if (
             published
             and published == state.get("sha256")
             and not stale
             and not forced
             and not interrupted
+            and not always
         ):
             log("board unchanged (%s); leaving the panel alone" % published[:12])
             state["failures"] = 0

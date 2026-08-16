@@ -421,3 +421,32 @@ def test_an_unchanged_board_is_still_left_alone(frame) -> None:
 
     frame.main.cycle()
     assert frame.drawn == []
+
+
+def test_always_redraw_draws_an_unchanged_board(frame) -> None:
+    """For a wall you would rather have certainly right than efficient.
+
+    No record of what was drawn can be fully trusted -- the frame cannot
+    see its own glass -- so this makes the panel follow from the last
+    wake instead.
+    """
+    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="")
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.secrets.ALWAYS_REDRAW = True
+    try:
+        frame.main.cycle()
+    finally:
+        del frame.main.secrets.ALWAYS_REDRAW
+    assert frame.drawn, "an unchanged board must still be drawn when asked"
+
+
+def test_the_setting_is_off_unless_secrets_says_otherwise(frame) -> None:
+    """A frame whose secrets.py predates the setting must not start
+    refreshing the panel every two hours."""
+    assert frame.main.ALWAYS_REDRAW is False
+    assert not hasattr(frame.main.secrets, "ALWAYS_REDRAW")
+
+    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="")
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+    assert frame.drawn == []
