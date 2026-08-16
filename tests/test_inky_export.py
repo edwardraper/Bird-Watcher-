@@ -26,15 +26,23 @@ from birddisplay.render.palette import (
     to_inky_png,
 )
 
-# Pimoroni's PicoGraphics pen order for PEN_3BIT, from the picographics
-# README: BLACK 0, WHITE 1, GREEN 2, BLUE 3, RED 4, YELLOW 5.
+# The pen order of the Spectra 6 panel, read off the glass rather than
+# out of a README. Pimoroni's PEN_3BIT documentation gives BLACK 0,
+# WHITE 1, GREEN 2, BLUE 3, RED 4, YELLOW 5 -- which describes the older
+# seven-colour Inky Frame. Drawing the palette card through that order
+# printed blue where yellow belonged, red where blue belonged and yellow
+# where green belonged.
+#
+# Do not "correct" this back to the documented order. It was wrong on the
+# hardware, and the failure is silent: every board still draws, in the
+# wrong colours, with nothing anywhere to say so.
 EXPECTED_PEN = {
     Ink.BLACK: 0,
     Ink.WHITE: 1,
-    Ink.GREEN: 2,
-    Ink.BLUE: 3,
-    Ink.RED: 4,
-    Ink.YELLOW: 5,
+    Ink.YELLOW: 2,
+    Ink.RED: 3,
+    Ink.GREEN: 4,
+    Ink.BLUE: 5,
 }
 
 
@@ -72,10 +80,25 @@ def test_every_ink_lands_on_the_right_pen(config: Config, board_image) -> None:
 
 def test_the_lookup_table_matches_the_expected_order() -> None:
     """Stated twice on purpose: once as the table the code uses, once as
-    Pimoroni's documented order. If they drift apart the board comes out
-    with green sky."""
+    the order measured on the panel. If they drift apart the board comes
+    out with green sky, and nothing anywhere reports it."""
     for ink, pen in EXPECTED_PEN.items():
         assert INKY_PEN_CODES[int(ink)] == pen
+
+
+def test_the_palette_slots_are_the_inverse_of_the_pen_codes() -> None:
+    """The two tables describe one mapping from opposite ends.
+
+    INKY_PEN_CODES says which pen an ink is drawn with; INKY_SLOT_ORDER
+    says which colour a pen prints, and is what makes the exported PNG
+    viewable on a laptop. Change one without the other and the file looks
+    right on screen while the wall is wrong -- the worst of both, because
+    the preview stops being evidence.
+    """
+    from birddisplay.render.palette import INKY_SLOT_ORDER
+
+    for ink in Ink:
+        assert INKY_SLOT_ORDER[INKY_PEN_CODES[int(ink)]] == ink
 
 
 def test_the_palette_describes_those_pens(config: Config, board_image) -> None:
