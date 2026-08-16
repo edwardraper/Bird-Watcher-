@@ -83,6 +83,7 @@ class FakeNetwork:
 
     def __init__(self, connected: bool = True) -> None:
         self.connected = connected
+        self.status_code = -2
 
     def WLAN(self, _interface: int):  # noqa: N802 - matching MicroPython
         outer = self
@@ -96,6 +97,11 @@ class FakeNetwork:
 
             def connect(self, _ssid: str, _password: str) -> None:
                 pass
+
+            def status(self) -> int:
+                # MicroPython reports why a join failed; -2 is "no access
+                # point with that name", the 5GHz/typo case.
+                return 3 if outer.connected else outer.status_code
 
             def disconnect(self) -> None:
                 pass
@@ -164,10 +170,22 @@ def frame(tmp_path: Path, monkeypatch):
     }.items():
         monkeypatch.setitem(sys.modules, name, module)
 
+    # MicroPython's monotonic clock. CPython has no ticks_* at all, so
+    # without these the wifi timeout branch raises AttributeError instead
+    # of timing out -- and every test of it passes for the wrong reason,
+    # because a raised exception and a timeout leave the same wreckage.
+    monkeypatch.setattr(time, "ticks_ms", lambda: int(time.time() * 1000), raising=False)
+    monkeypatch.setattr(time, "ticks_add", lambda t, d: t + d, raising=False)
+    monkeypatch.setattr(time, "ticks_diff", lambda a, b: a - b, raising=False)
+
     spec = importlib.util.spec_from_file_location("frame_main", FIRMWARE)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # No test is about how long the radio is given, and with the timeout
+    # branch now actually reachable the default 30s would be spent, twice
+    # over, waiting for a fake radio to fail.
+    module.WIFI_TIMEOUT_SECONDS = 0
 
     # Keep the device's writes inside tmp_path.
     module.IMAGE_PATH = str(tmp_path / "board.png")
@@ -262,3 +280,30 @@ def test_the_clock_is_only_set_when_it_is_wrong(frame) -> None:
     frame.main.cycle()
     # The host clock is correct, so NTP is not needed.
     assert frame.inky.clock_set == 0
+
+
+def test_a_wifi_failure_says_which_failure_it_was(frame, capsys) -> None:
+    """Thirty seconds of nothing looks the same for every wifi problem.
+
+    A wrong password, a 5GHz-only network and a router that never
+    answered are one message apart on the panel's own log, and that
+    message is the whole diagnosis when the frame is across the room.
+    """
+    frame.net.connected = False
+    frame.net.status_code = -2
+    frame.main.cycle()
+    assert "no access point with that name" in capsys.readouterr().out
+
+
+def test_a_wrong_password_says_so(frame, capsys) -> None:
+    frame.net.connected = False
+    frame.net.status_code = -3
+    frame.main.cycle()
+    assert "wrong password" in capsys.readouterr().out
+
+
+def test_an_unknown_status_still_reports_the_number(frame, capsys) -> None:
+    frame.net.connected = False
+    frame.net.status_code = 99
+    frame.main.cycle()
+    assert "status 99" in capsys.readouterr().out

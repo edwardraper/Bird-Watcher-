@@ -105,6 +105,29 @@ def write_state(state):
 # -- network ----------------------------------------------------------
 
 
+# MicroPython's status codes, which say which failure this was. Without
+# them every wifi problem looks identical from the far side of the room:
+# a wrong password, a 5GHz-only network and a router that never answered
+# all produce the same thirty seconds of nothing.
+WIFI_STATUS = {
+    0: "idle",
+    1: "still connecting",
+    -1: "connection failed",
+    -2: "no access point with that name -- check spelling, and that it is "
+        "2.4GHz: the Pico 2 W has no 5GHz radio",
+    -3: "wrong password",
+}
+
+
+def wifi_reason(wlan):
+    """Why the join failed, as a phrase to put after "wifi timed out"."""
+    try:
+        code = wlan.status()
+    except Exception:  # pragma: no cover - older firmware may not have it
+        return ""
+    return ": " + WIFI_STATUS.get(code, "status %s" % code)
+
+
 def connect_wifi():
     """Join the network, or give up after WIFI_TIMEOUT_SECONDS."""
     wlan = network.WLAN(network.STA_IF)
@@ -115,7 +138,7 @@ def connect_wifi():
         deadline = time.ticks_add(time.ticks_ms(), WIFI_TIMEOUT_SECONDS * 1000)
         while not wlan.isconnected():
             if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
-                log("wifi timed out")
+                log("wifi timed out%s" % wifi_reason(wlan))
                 inky_frame.led_wifi.off()
                 return None
             time.sleep(0.5)
