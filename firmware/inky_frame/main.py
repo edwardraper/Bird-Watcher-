@@ -35,10 +35,24 @@ indices are already Inky pen numbers, and PNG_COPY copies them straight
 into the framebuffer. Anything else -- a JPEG, or PNG_DITHER, or
 PNG_POSTERISE -- would re-dither type that was drawn at 11px to be read
 from across a room, and turn the digest into mush.
+
+And one rule about memory, because the framebuffer is the largest single
+allocation on the board and it must be contiguous: **reserve it first,
+run every cycle on a fresh heap.** The TLS handshake, the JSON parse and
+the download all leave the heap in small pieces, and a framebuffer does
+not fit in the holes they leave behind -- it fails with MemoryError, the
+cycle is abandoned, and the wall keeps whatever it was showing, which
+after an interrupted refresh is a blank panel. So the framebuffer is
+allocated before the radio comes up, while the heap is still one
+unbroken piece (the stock Pimoroni firmware does the same), and each
+wake starts from a cold boot: the RTC gives battery power that for free
+by cutting the supply, and on USB -- where nothing cuts anything --
+machine.reset() stands in for it between cycles.
 """
 
 import gc
 import json
+import machine
 import os
 import time
 
@@ -313,15 +327,23 @@ def download(url, path, expected_bytes=0):
 # -- the panel --------------------------------------------------------
 
 
-def draw(path):
-    """Put the downloaded board on the glass.
+def framebuffer():
+    """Reserve the panel's framebuffer, first, on an unbroken heap.
 
-    PicoGraphics is created here rather than at import time because it
-    reserves the framebuffer, and the TLS handshake above wants the room.
+    Called before the radio comes up. Ask for this after the TLS
+    handshake and the download have fragmented the heap and the ~190kB
+    contiguous block it needs may simply not exist any more: PicoGraphics
+    raises MemoryError, the cycle is abandoned, and every log line says
+    "cycle failed" while the wall shows nothing new. Asked for on a
+    boot-fresh heap it cannot fail, and the network's many small buffers
+    fit around it without complaint.
     """
     gc.collect()
-    graphics = PicoGraphics(DISPLAY_INKY_FRAME_7)
+    return PicoGraphics(DISPLAY_INKY_FRAME_7)
 
+
+def draw(graphics, path):
+    """Put the downloaded board on the glass."""
     png = pngdec.PNG(graphics)
     png.open_file(path)
     # The indices in this file are already Inky pen numbers. PNG_COPY is
@@ -369,6 +391,9 @@ def cycle():
 
     wlan = None
     try:
+        # Before the network touches the heap -- see framebuffer().
+        graphics = framebuffer()
+
         wlan = connect_wifi()
         if wlan is None:
             raise OSError("no network")
@@ -439,7 +464,7 @@ def cycle():
         state["drawing"] = published
         write_state(state)
 
-        draw(IMAGE_PATH)
+        draw(graphics, IMAGE_PATH)
 
         state["sha256"] = published
         state["headline"] = bird
@@ -482,8 +507,17 @@ def sleep(minutes):
 
 
 def main():
-    while True:
-        sleep(cycle())
+    """One cycle per boot.
+
+    On battery this function never gets past sleep(): the RTC cuts the
+    power and the next wake runs main.py again from nothing. On USB the
+    RTC cannot cut anything, so the reset stands in for it -- either way
+    every cycle starts with a fresh interpreter and an unfragmented
+    heap, instead of looping forever inside one that has been chewed up
+    by however many cycles came before.
+    """
+    sleep(cycle())
+    machine.reset()
 
 
 if __name__ == "__main__":

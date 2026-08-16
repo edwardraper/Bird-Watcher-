@@ -171,6 +171,17 @@ def frame(tmp_path: Path, monkeypatch):
 
     picographics.PicoGraphics = lambda _display: FakeGraphics()  # type: ignore[attr-defined]
 
+    machine = types.ModuleType("machine")
+    machine.resets = 0  # type: ignore[attr-defined]
+
+    def reset() -> None:
+        # A real reset never returns; raising is the closest a test can
+        # get without losing the interpreter it is running in.
+        machine.resets += 1  # type: ignore[attr-defined]
+        raise RuntimeError("machine.reset")
+
+    machine.reset = reset  # type: ignore[attr-defined]
+
     secrets = types.ModuleType("secrets")
     secrets.WIFI_SSID = "net"  # type: ignore[attr-defined]
     secrets.WIFI_PASSWORD = "pw"  # type: ignore[attr-defined]
@@ -184,6 +195,7 @@ def frame(tmp_path: Path, monkeypatch):
         "picographics": picographics,
         "urllib": urllib,
         "secrets": secrets,
+        "machine": machine,
     }.items():
         monkeypatch.setitem(sys.modules, name, module)
 
@@ -217,6 +229,7 @@ def frame(tmp_path: Path, monkeypatch):
         main=module,
         inky=inky,
         net=net,
+        machine=machine,
         drawn=drawn,
         responses=responses,
         state_path=Path(module.STATE_PATH),
@@ -446,9 +459,9 @@ def test_the_marker_is_set_before_the_panel_is_touched(frame) -> None:
     seen: list = []
     real_draw = frame.main.draw
 
-    def watching_draw(path):
+    def watching_draw(graphics, path):
         seen.append(json.loads(frame.state_path.read_text()).get("drawing"))
-        return real_draw(path)
+        return real_draw(graphics, path)
 
     frame.main.draw = watching_draw
     frame.responses["manifest"]["sha256"] = "abc"
@@ -578,6 +591,46 @@ def test_a_flaky_download_is_retried_within_the_wake(frame) -> None:
     assert "update" in frame.drawn
     assert minutes == frame.main.REFRESH_MINUTES
     assert json.loads(frame.state_path.read_text())["headline"] == "Robin"
+
+
+def test_the_framebuffer_is_reserved_before_the_radio_comes_up(frame) -> None:
+    """The framebuffer is ~190kB and must be contiguous. Allocated after
+    the TLS handshake and the download have fragmented the heap, it can
+    fail with MemoryError on a board with plenty of free-but-scattered
+    RAM -- every cycle then dies at draw time and the wall never changes.
+    On a boot-fresh heap it cannot fail."""
+    events: list = []
+    real_pg = frame.main.PicoGraphics
+
+    def noting_pg(display):
+        events.append("framebuffer")
+        return real_pg(display)
+
+    real_wifi = frame.main.connect_wifi
+
+    def noting_wifi():
+        events.append("wifi")
+        return real_wifi()
+
+    frame.main.PicoGraphics = noting_pg
+    frame.main.connect_wifi = noting_wifi
+    frame.main.cycle()
+
+    assert "framebuffer" in events and "wifi" in events
+    assert events.index("framebuffer") < events.index("wifi"), (
+        "the framebuffer must be allocated before the network fragments the heap"
+    )
+
+
+def test_usb_power_resets_between_cycles(frame, monkeypatch) -> None:
+    """On battery every wake is a cold boot -- the RTC cut the power. On
+    USB nothing cuts anything, so without a reset one interpreter loops
+    forever and its heap carries every previous cycle's fragmentation."""
+    monkeypatch.setattr(frame.main.time, "sleep", lambda seconds: None)
+    with pytest.raises(RuntimeError, match="machine.reset"):
+        frame.main.main()
+    assert frame.machine.resets == 1
+    assert frame.inky.slept_for == [frame.main.REFRESH_MINUTES]
 
 
 def test_a_download_that_keeps_failing_gives_up_after_its_attempts(frame) -> None:

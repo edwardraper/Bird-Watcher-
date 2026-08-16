@@ -81,6 +81,32 @@ Between cycles the board is genuinely off — about 20µA — so battery life is
 measured in months, and is set mostly by how often the birds change rather
 than by the two-hour tick.
 
+Every cycle runs on a fresh interpreter. On battery that comes free — the
+RTC cuts the power between wakes, so each wake is a cold boot. On USB the
+power is never cut, so the firmware calls `machine.reset()` between cycles
+instead. Either way the heap starts empty, and the framebuffer — the
+largest single allocation on the board, which must be contiguous — is
+reserved before the radio comes up, while the heap is still one unbroken
+piece. Allocated any later, the TLS handshake and the download can leave
+plenty of free RAM with no 190kB hole in it, and the draw dies with
+MemoryError every cycle while the wall never changes.
+
+## What belongs on the flash
+
+The firmware needs exactly three things of its own on the Pico's flash:
+`main.py`, `secrets.py`, and the `lib/` folder that shipped with the frame
+(leave that one alone — MicroPython finds libraries in it). `board.png`
+and `last.json` are created by the firmware itself; deleting `last.json`
+is harmless and simply forces a redraw on the next wake, which makes it a
+useful lever when testing.
+
+The frame ships with Pimoroni's launcher demos on it — `inky_helper.py`,
+`nasa_apod.py`, `news_headlines.py`, `daily_xkcd.py`,
+`carbon_intensity.py` and similar. This firmware never imports any of
+them, so they are dead weight: safe to delete, and worth deleting for the
+flash space, but not the cause of anything — a file that is never imported
+never runs.
+
 ## When something goes wrong
 
 Nothing is drawn. That is the entire error-handling strategy, and it is the
