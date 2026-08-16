@@ -85,7 +85,28 @@ MAX_YEAR = 2075
 # How long to let the panel rest after a refresh before the power can be
 # cut. Long enough for a Spectra 6 to finish settling, short enough to be
 # nothing against a two-hour cycle.
-PANEL_SETTLE_SECONDS = 5
+PANEL_SETTLE_SECONDS = 10
+
+# Wipe the panel to white and let it rest before drawing the board.
+#
+# The suspicion this exists to test: that a refresh over an image already
+# on the glass is what fails, and that a panel taken to white first will
+# take the board. Plenty of e-ink examples clear before drawing for
+# exactly this reason.
+#
+# It is not free. Two full refreshes every cycle rather than one, so
+# roughly double the panel wear and double the current spent drawing,
+# and a cycle that takes two minutes instead of forty seconds. Worth it
+# while the fault is unexplained; worth turning off once it is not.
+CLEAR_BEFORE_DRAW = True
+
+# How long to leave the panel white before drawing over it. Deliberately
+# generous -- the point is to give it every chance to finish, not to be
+# quick.
+CLEAR_SETTLE_SECONDS = 60
+
+# The white pen, in the order measured on this panel: 0 black, 1 white.
+WHITE_PEN = 1
 
 CHUNK = 1024
 
@@ -285,6 +306,21 @@ def draw(path):
     """
     gc.collect()
     graphics = PicoGraphics(DISPLAY_INKY_FRAME_7)
+
+    if CLEAR_BEFORE_DRAW:
+        inky_frame.led_busy.on()
+        log("clearing the panel first (~30s)")
+        graphics.set_pen(WHITE_PEN)
+        graphics.clear()
+        graphics.update()
+        log("panel cleared; resting %ds" % CLEAR_SETTLE_SECONDS)
+        time.sleep(CLEAR_SETTLE_SECONDS)
+        inky_frame.led_busy.off()
+
+    # Read after the clear, not before it: the file has been on flash
+    # since the download, and opening it again here means the board is
+    # decoded onto a panel that has just been wiped rather than onto a
+    # framebuffer prepared a minute and a half ago.
     png = pngdec.PNG(graphics)
     png.open_file(path)
     # The indices in this file are already Inky pen numbers. PNG_COPY is
