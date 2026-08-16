@@ -34,7 +34,12 @@ NAMES = ["BLACK", "WHITE", "YELLOW", "RED", "BLUE", "GREEN"]
 
 
 def build_card(config) -> Image.Image:
-    width, height = config.display.width, config.display.height
+    # board_size, not width/height: the card has to travel the same road a
+    # board does, and since the frame hangs portrait that road starts at
+    # 480x800 and is turned on the way out. Building it at panel size got
+    # the card refused by the exporter -- "board is (800, 480), frame
+    # expects (480, 800)" -- which is the check doing its job.
+    width, height = config.display.board_size
     card = Image.new("P", (width, height), int(Ink.WHITE))
     card.putpalette(flat_palette(config.palette))
     draw = ImageDraw.Draw(card)
