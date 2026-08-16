@@ -368,3 +368,56 @@ def test_the_rescue_only_matches_on_whitespace(frame) -> None:
     assert from_air(Radio([b"Thorpe Grange"]), "Thorpe Grange") is None
     assert from_air(Radio([b"Thorpe Grange Guest"]), "Thorpe Grange") is None
     assert from_air(Radio([b""]), "Thorpe Grange") is None
+
+
+def test_an_interrupted_refresh_is_drawn_again(frame) -> None:
+    """The frame cannot look at its own glass.
+
+    Thirty seconds of Spectra 6 refresh is the likeliest moment for a
+    battery to sag or a cable to be pulled, and what that leaves is a
+    blank panel matching no sha at all. Without this the frame compares
+    shas, decides it is already showing that board, and leaves the wall
+    blank until the daily forced refresh -- which is how a wall stays
+    empty for a day with nothing reporting a fault.
+    """
+    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="abc")
+    frame.responses["manifest"]["sha256"] = "abc"
+
+    frame.main.cycle()
+    assert frame.drawn, "an unfinished refresh must be redrawn"
+
+
+def test_a_finished_refresh_clears_the_marker(frame) -> None:
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+
+    state = json.loads(frame.state_path.read_text())
+    assert state["sha256"] == "abc"
+    assert not state["drawing"], "a completed refresh must not look interrupted"
+
+
+def test_the_marker_is_set_before_the_panel_is_touched(frame) -> None:
+    """Set afterwards it would prove nothing: the whole point is that the
+    record survives a power cut in the middle of the update."""
+    seen: list = []
+    real_draw = frame.main.draw
+
+    def watching_draw(path):
+        seen.append(json.loads(frame.state_path.read_text()).get("drawing"))
+        return real_draw(path)
+
+    frame.main.draw = watching_draw
+    frame.responses["manifest"]["sha256"] = "abc"
+    frame.main.cycle()
+
+    assert seen == ["abc"], "the marker must already be on disk when drawing starts"
+
+
+def test_an_unchanged_board_is_still_left_alone(frame) -> None:
+    """The rescue must not become "redraw every time", which would drive a
+    thirty-second panel update every two hours forever."""
+    save_state(frame, sha256="abc", refreshed_at=time.time(), drawing="")
+    frame.responses["manifest"]["sha256"] = "abc"
+
+    frame.main.cycle()
+    assert frame.drawn == []
