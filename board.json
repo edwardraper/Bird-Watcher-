@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "3969a4eb5e6740136b9f408b853bc5e5d20693894016f853e469f2e64c33b705",
+ "bytes": 27401,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "7be943ff6b04f045c1558871c9fd827349a7752f973072ec49fcb0df0986d4d2",
+   "bytes": 58520,
+   "headline": "Little Stint"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "f66bb279fc208e22850eef4da715c2b625615ed78da12dd1525c1de705d4fda6",
+   "bytes": 64681,
+   "headline": "Caspian Gull"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "c9dbafbc94a5a57d030e6742b35061a5800f84327e195d5bd88412bc25c23012",
+   "bytes": 63931,
+   "headline": "Yellow-legged Gull"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-09-05T15:36:13+00:00",
+ "image": "board.png",
+ "headline": "Common Moorhen"
+}
