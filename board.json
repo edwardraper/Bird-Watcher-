@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "831ce17a1afe8d97d4360af20c2efad7c6584dc4b71d4e73e8d699622c2bb1ef",
+ "bytes": 62898,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "74e44f63ba68f9f06c200437eb0be4c9410be1448923551bf8b3e92600f996e6",
+   "bytes": 64346,
+   "headline": "Red-crested Pochard"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "74c60612e9060cc4006dbc0bdb6c633efeee77ff314605a0d587aa0a6f3dea4e",
+   "bytes": 63890,
+   "headline": "Black Swan"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "7208bc031dfcca6c53de303f3dc2eb9df1c0f6c9d8d84332aaa1727248c3d2e6",
+   "bytes": 58605,
+   "headline": "Ruff"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-09-12T21:01:06+00:00",
+ "image": "board.png",
+ "headline": "Pectoral Sandpiper"
+}
