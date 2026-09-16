@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "d202ad53ff36ca6f20b4318d90885168fe9f98ca85b89554bae7c90fdb321040",
+ "bytes": 36598,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "deeb1c459b00aeb90cfe915d7d63b2df4417be3ba03963d82ce1a68db347dc8f",
+   "bytes": 64636,
+   "headline": "Red-crested Pochard"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "67e665481dd2f2053447aae2aa1390a09386ec02408b9f88a15b1bb4e17b6fea",
+   "bytes": 58632,
+   "headline": "Ruff"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "1b78a6f97558cbec061b3095a00179176763eebfc8138301ee493977c5fab099",
+   "bytes": 58545,
+   "headline": "Garganey"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-09-16T00:50:04+00:00",
+ "image": "board.png",
+ "headline": "Grey Wagtail"
+}
