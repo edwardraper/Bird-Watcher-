@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "ac7621504d8d2960ebcd1c8fd8e615372da0d2e3f951084af37765f8c5bedd16",
+ "bytes": 32495,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "b2a719f8c689860486cc61f40740a07bbac285184bf406a50a4ca2988566db6f",
+   "bytes": 64591,
+   "headline": "Red-crested Pochard"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "1401d7e6f2e2a45d37b5078747845a1398cc811f7ac8384d9a1571c05462ebf8",
+   "bytes": 65172,
+   "headline": "Caspian Gull"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "0c78b3a48ed285395ce83696843a8ceb7ba19ab87982f7a1a9aaa8cd44b6eaf7",
+   "bytes": 58708,
+   "headline": "Garganey"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-09-19T16:06:50+00:00",
+ "image": "board.png",
+ "headline": "Dunnock"
+}
