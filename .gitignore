@@ -20,6 +20,8 @@ birddisplay.env
 
 # The frame's wifi credentials. secrets.example.py is the template.
 firmware/inky_frame/secrets.py
+ticketdrop/secrets.py
+ticketdrop/probe.json
 
 # Exported boards. The workflow publishes these to the `board` branch;
 # a local run should not leave them in the working tree.
