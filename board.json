@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "a9f95ba28ec7d64b7b6248f53b9692ea79dce1c48a1dfcd4e1de9be65097a12e",
+ "bytes": 29558,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "df1c457b21c86e7faf727d846304208b7b5b40f56e7a2149eb0ae83967bf82c3",
+   "bytes": 66045,
+   "headline": "Curlew Sandpiper"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "69435805f7821852bcf6ce507d94070a23d1ec401de274885aa876605a4237d3",
+   "bytes": 61010,
+   "headline": "Dunlin"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "5333a6c6563275014331bf5736002f4725683aea39b8d50b494e364cf6c4caa9",
+   "bytes": 31344,
+   "headline": "Common Snipe"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-09-26T16:46:54+00:00",
+ "image": "board.png",
+ "headline": "Northern Lapwing"
+}
