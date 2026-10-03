@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "50693ad8a4d6382a239e81a665b569b15c84504d84b32d174d161fa715d54cfb",
+ "bytes": 23699,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "6d495445565bf2067ee009153275e272f1888b18eb3d76ef96af1dfe9d1087ba",
+   "bytes": 53516,
+   "headline": "White-throated Dipper"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "022e715af69745af1aa5f7bbb17a0a694885445eb4189ceccd3648132f1744e3",
+   "bytes": 44562,
+   "headline": "Merlin"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "35b5b29bc604c0cce1b2ceff3e4ce2aee4b865c51727d0a573133787c73bf959",
+   "bytes": 64464,
+   "headline": "Red Grouse"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-10-03T12:04:22+00:00",
+ "image": "board.png",
+ "headline": "European Goldfinch"
+}
