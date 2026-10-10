@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "832c29e14bd43bae17708db0adbcd563820448b9bb9f337ec2c5a411a2f516d1",
+ "bytes": 21480,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "e757d3e8972d95172a4b8ef7bd0346f8fff0c11103d0d635d311121c260c27a7",
+   "bytes": 53631,
+   "headline": "White-throated Dipper"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "8fb21e88ff428f3aaefdb9bc56f23ab54a5d6fd1190da7b927aaf3dd9d244609",
+   "bytes": 40154,
+   "headline": "Eurasian/Green-winged Teal"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "42b332d0ce5156896510f7220fa7cd8c86f56357401b53a591bdd07f8e71fe95",
+   "bytes": 27658,
+   "headline": "Little Grebe"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-10-10T23:53:12+00:00",
+ "image": "board.png",
+ "headline": "Long-tailed Tit"
+}
