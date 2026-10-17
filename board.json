@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "716a99c9dd147493ba10ac8799b5c1787e796bdc5fd549dff0c21f7088bb979a",
+ "bytes": 56811,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "5dd072116945e93a2098894d8bea4465ac0289a845d2c0ef33d6b20264c824c3",
+   "bytes": 64622,
+   "headline": "Red-crested Pochard"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "72d63c99c6f959e3d6f46ac39632a529a78fa1e4d8d7f9c560955a89dc6d78bf",
+   "bytes": 64230,
+   "headline": "Yellow-legged Gull"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "3b09b12e87f5e4fde720ec7826620050de002d3648149b5030be96afa4a790fd",
+   "bytes": 41785,
+   "headline": "Great White Egret"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-10-17T18:51:58+00:00",
+ "image": "board.png",
+ "headline": "Common Pochard"
+}
