@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "8bd897ba616119899958829016a7761aec4fc81f0d8997929b359ec0e041714f",
+ "bytes": 58845,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "bfd0174373d5f2aaca730daf91cab114ef983245568fd93a9ed8062dda507c48",
+   "bytes": 64704,
+   "headline": "Red-crested Pochard"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "9d1609846594f026b624653cc3ed15e68455fcfd2156b8b95aa730b62a59df5f",
+   "bytes": 41867,
+   "headline": "Great White Egret"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "692b2574f393892a3176ca2d867ae8e09cbda92588c6ff4a634d7b6a7b1305f3",
+   "bytes": 53822,
+   "headline": "White-throated Dipper"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-10-24T12:56:22+00:00",
+ "image": "board.png",
+ "headline": "Common Gull"
+}
