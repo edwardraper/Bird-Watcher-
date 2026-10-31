@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "0214c5a853825c01f105d45367076ac0e766d1fcca27f298d1a8a896ceca4d0a",
+ "bytes": 34136,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "45b883e9ccfa2aff31c83ec6c9f63efc8cb056a3902d4e12062c898b34d330f6",
+   "bytes": 40262,
+   "headline": "Great White Egret"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "424f1f74cd67bf366b7aaeb5635f0955bdddd27a1d61e5db4ae7998c41de61f2",
+   "bytes": 58946,
+   "headline": "Common Gull"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "38056b929d42bc0be7c35fd0b087250c8daa550a22ef090313cdbb7e18119fa3",
+   "bytes": 67739,
+   "headline": "Great Black-backed Gull"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-10-31T18:47:58+00:00",
+ "image": "board.png",
+ "headline": "Common Starling"
+}
