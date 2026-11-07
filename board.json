@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "2ff1b57ccf8e79d9d47dacae358cffb80674e16a0213ead63e40483267af0e26",
+ "bytes": 26579,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "640c29ae46a84e4839dd8d052dc865a6158e0a49c9ed50957596707da9d37e24",
+   "bytes": 44293,
+   "headline": "Tawny Owl"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "9a65657838d26ed070d69f4fb0f492d181020fcd83a76203016d17f21b85622a",
+   "bytes": 29479,
+   "headline": "Common Kestrel"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "696216b827d8be4f3144b00b62ae490e3c66d815774a0c4afba21df219af6cb3",
+   "bytes": 29099,
+   "headline": "Redwing"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-11-07T13:35:35+00:00",
+ "image": "board.png",
+ "headline": "Eurasian Blue Tit"
+}
