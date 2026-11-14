@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "387c1b51913293ae89e200cc3e05585682f8d57377651928cf5136c60606eb0a",
+ "bytes": 57328,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "8263016cf9e200f4f9320efdf57e4e4d047e891d7587d77c70288a7ddd7fbe51",
+   "bytes": 31054,
+   "headline": "Eurasian Wren"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "a8bc926b4863b8fbf8556657eaf459928b436967f7dcf8d9bb066f6e515fb111",
+   "bytes": 42046,
+   "headline": "Great White Egret"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "2b414b10583e13bbbb314457cc9ce425c4d53424c461c513f9b2bdf47352c4be",
+   "bytes": 53814,
+   "headline": "White-throated Dipper"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-11-14T20:57:09+00:00",
+ "image": "board.png",
+ "headline": "Hen Harrier"
+}
