@@ -1,0 +1,30 @@
+{
+ "schema_version": 1,
+ "sha256": "3c75668774cc028ca04d3e823fce41e868965deb0ce4f9d135b3d326dceb600d",
+ "bytes": 34551,
+ "alternates": [
+  {
+   "image": "board-1.png",
+   "sha256": "5cf4d818ea076033ec030d7507893e703d9b13511037665e398da54bfbe0976e",
+   "bytes": 30710,
+   "headline": "Eurasian Wren"
+  },
+  {
+   "image": "board-2.png",
+   "sha256": "13019cf89efe15c807802ea05b224e36b52bf7702b4dcfaad17d00ecfc7824be",
+   "bytes": 60045,
+   "headline": "Greater Scaup"
+  },
+  {
+   "image": "board-3.png",
+   "sha256": "cfb2f253cce37b7bf0487ccd5ff407f91132a91b4c2c9481ac8ef354b6876683",
+   "bytes": 30992,
+   "headline": "Common Snipe"
+  }
+ ],
+ "width": 800,
+ "height": 480,
+ "generated_at": "2026-11-21T20:40:33+00:00",
+ "image": "board.png",
+ "headline": "Common Woodpigeon"
+}
